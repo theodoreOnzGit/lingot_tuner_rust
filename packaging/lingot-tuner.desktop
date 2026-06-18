@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=lingot-tuner
+GenericName=Instrument Tuner
+Comment=A musical instrument tuner (Rust rewrite of lingot)
+Exec=lingot-tuner
+Icon=lingot-tuner
+Categories=AudioVideo;Audio;
+Terminal=false

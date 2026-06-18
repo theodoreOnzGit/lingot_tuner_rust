@@ -22,6 +22,7 @@
  * along with lingot_tuner_rust. If not, see <https://www.gnu.org/licenses/>.
  */
 
+pub mod audio;
 pub mod config;
 pub mod defs;
 pub mod fft;

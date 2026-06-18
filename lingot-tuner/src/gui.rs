@@ -52,9 +52,16 @@ pub fn run() -> eframe::Result<()> {
             let config = Config::default();
             let scale = config.scale.clone();
             let gauge_range = config.gauge_range;
+            let gauge_rest_value = config.gauge_rest_value;
             let (core, results) = Core::start(config)
                 .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
-            Ok(Box::new(TunerApp::new(core, results, scale, gauge_range)))
+            Ok(Box::new(TunerApp::new(
+                core,
+                results,
+                scale,
+                gauge_range,
+                gauge_rest_value,
+            )))
         }),
     )
 }
@@ -66,6 +73,8 @@ struct TunerApp {
     scale: Scale,
     /// Full cents range spanned by the gauge (from config).
     gauge_range: f64,
+    /// Where the needle rests when no pitch is detected (from config; ≈ −45¢).
+    gauge_rest_value: f64,
 
     frequency: f64,
     note: String,
@@ -74,12 +83,19 @@ struct TunerApp {
 }
 
 impl TunerApp {
-    fn new(core: Core, results: Receiver<TunerResult>, scale: Scale, gauge_range: f64) -> Self {
+    fn new(
+        core: Core,
+        results: Receiver<TunerResult>,
+        scale: Scale,
+        gauge_range: f64,
+        gauge_rest_value: f64,
+    ) -> Self {
         TunerApp {
             _core: core,
             results,
             scale,
             gauge_range,
+            gauge_rest_value,
             frequency: 0.0,
             note: "--".to_string(),
             cents: 0.0,
@@ -198,17 +214,19 @@ impl TunerApp {
         painter.text(Pos2::new(center.x, center.y - major_r * 0.80), Align2::CENTER_CENTER,
             "cent", font, ink);
 
-        // needle
-        if self.frequency > 0.0 {
-            let clamped = (self.cents as f32).clamp(-gauge_range / 2.0, gauge_range / 2.0);
-            let a = 2.0 * (clamped / gauge_range) * overture;
-            let red = Color32::from_rgb(170, 51, 51);
-            painter.line_segment([polar(-h * 0.08, a), polar(h * 0.85, a)],
-                Stroke::new(h * 0.013, red));
-            painter.circle_filled(center, h * 0.045, red);
+        // needle — points at the detected cents, or rests at gauge_rest_value
+        // (≈ −45¢, near full-left) when no pitch is detected, like lingot.
+        let needle_cents = if self.frequency > 0.0 {
+            self.cents
         } else {
-            painter.circle_filled(center, h * 0.045, Color32::from_gray(150));
-        }
+            self.gauge_rest_value
+        };
+        let clamped = (needle_cents as f32).clamp(-gauge_range / 2.0, gauge_range / 2.0);
+        let a = 2.0 * (clamped / gauge_range) * overture;
+        let red = Color32::from_rgb(170, 51, 51);
+        painter.line_segment([polar(-h * 0.08, a), polar(h * 0.85, a)],
+            Stroke::new(h * 0.013, red));
+        painter.circle_filled(center, h * 0.045, red);
     }
 
     fn draw_spectrum(&self, ui: &mut egui::Ui) {

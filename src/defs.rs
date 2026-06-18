@@ -22,7 +22,13 @@
  * along with lingot_tuner_rust. If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod config;
-pub mod defs;
-pub mod fft;
-pub mod scale;
+//! Shared constants, mirroring `lingot-defs.h`.
+
+/// Reference pitch of the middle A (A4), in Hz.
+pub const MID_A_FREQUENCY_HZ: f64 = 440.0;
+
+/// Reference pitch of the middle C (C4), in Hz.
+pub const MID_C_FREQUENCY_HZ: f64 = 261.625565;
+
+/// Cents in one octave.
+pub const CENTS_PER_OCTAVE: f64 = 1200.0;

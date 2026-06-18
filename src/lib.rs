@@ -27,4 +27,5 @@ pub mod defs;
 pub mod fft;
 pub mod filter;
 pub mod scale;
+pub mod signal;
 pub mod window;

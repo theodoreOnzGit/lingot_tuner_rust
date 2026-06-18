@@ -69,6 +69,12 @@ impl FftPlan {
             *out = c.norm_sqr() * scale;
         }
     }
+
+    /// The complex spectrum from the most recent [`compute_spd`](Self::compute_spd)
+    /// call. Used for sub-bin peak interpolation (Quinn's estimator).
+    pub fn spectrum(&self) -> &[Complex<f64>] {
+        &self.buf
+    }
 }
 
 /// Selective DTFT-based SPD evaluation at `output.len()` evenly-spaced frequencies.

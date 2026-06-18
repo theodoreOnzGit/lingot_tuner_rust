@@ -78,8 +78,8 @@ The `lingot-tuner` package builds two binaries:
 
 ### GUI tuner
 
-The graphical tuner shows the note, cent deviation, a tuning gauge, a strobe
-disc, and a live spectrum. It is behind the `gui` feature:
+The graphical tuner shows the note, cent deviation, an analog tuning gauge (in
+the style of lingot's), and a live spectrum. It is behind the `gui` feature:
 
 ```
 cargo run --release --bin lingot-tuner --features gui

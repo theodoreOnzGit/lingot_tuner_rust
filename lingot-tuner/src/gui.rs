@@ -22,28 +22,26 @@
  * along with lingot_tuner_rust. If not, see <https://www.gnu.org/licenses/>.
  */
 
-//! egui frontend (Layer 5): tuning gauge, spectrum view, and strobe disc.
-
-use std::f32::consts::PI;
-use std::time::Instant;
+//! egui frontend (Layer 5): an analog tuning gauge (in the style of lingot's
+//! cairo gauge) plus a live spectrum view.
 
 use crossbeam_channel::Receiver;
-use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, Vec2};
+use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Vec2};
 use lingot::config::Config;
 use lingot::scale::Scale;
 
 use crate::core::{Core, TunerResult};
 use crate::note::nearest_note;
 
-/// Cents either side of centre shown on the gauge.
-const GAUGE_HALF_RANGE: f64 = 50.0;
 /// Within this many cents the note is considered in tune (turns green).
 const IN_TUNE_CENTS: f64 = 5.0;
+/// Half-sweep of the needle, in degrees (matches lingot's `overtureAngle`).
+const OVERTURE_DEG: f32 = 65.0;
 
 /// Launch the GUI tuner. Blocks until the window is closed.
 pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([520.0, 560.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([520.0, 520.0]),
         ..Default::default()
     };
 
@@ -53,9 +51,10 @@ pub fn run() -> eframe::Result<()> {
         Box::new(|_cc| {
             let config = Config::default();
             let scale = config.scale.clone();
+            let gauge_range = config.gauge_range;
             let (core, results) = Core::start(config)
                 .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })?;
-            Ok(Box::new(TunerApp::new(core, results, scale)))
+            Ok(Box::new(TunerApp::new(core, results, scale, gauge_range)))
         }),
     )
 }
@@ -65,28 +64,26 @@ struct TunerApp {
     _core: Core,
     results: Receiver<TunerResult>,
     scale: Scale,
+    /// Full cents range spanned by the gauge (from config).
+    gauge_range: f64,
 
     frequency: f64,
     note: String,
     cents: f64,
     spd: Vec<f64>,
-    /// Accumulated strobe phase (radians); advances proportionally to pitch error.
-    strobe_phase: f32,
-    last_frame: Instant,
 }
 
 impl TunerApp {
-    fn new(core: Core, results: Receiver<TunerResult>, scale: Scale) -> Self {
+    fn new(core: Core, results: Receiver<TunerResult>, scale: Scale, gauge_range: f64) -> Self {
         TunerApp {
             _core: core,
             results,
             scale,
+            gauge_range,
             frequency: 0.0,
             note: "--".to_string(),
             cents: 0.0,
             spd: Vec::new(),
-            strobe_phase: 0.0,
-            last_frame: Instant::now(),
         }
     }
 
@@ -116,128 +113,159 @@ impl eframe::App for TunerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.drain_results();
 
-        let dt = self.last_frame.elapsed().as_secs_f32();
-        self.last_frame = Instant::now();
-        // Strobe spins at a rate proportional to the cent error; still when in tune.
-        if self.frequency > 0.0 {
-            self.strobe_phase += dt * self.cents as f32 * 0.25;
-        }
-
         ui.vertical_centered(|ui| {
-            ui.add_space(12.0);
+            ui.add_space(10.0);
             let locked = self.frequency > 0.0;
             let colour = tune_colour(self.cents, locked);
-
-            ui.heading(egui::RichText::new(&self.note).size(64.0).color(colour));
+            ui.heading(egui::RichText::new(&self.note).size(56.0).color(colour));
             if locked {
-                ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(20.0));
-                ui.label(
-                    egui::RichText::new(format!("{:+.1} cents", self.cents))
-                        .size(18.0)
-                        .color(colour),
-                );
+                ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(18.0));
             } else {
-                ui.label(egui::RichText::new("listening…").size(18.0).weak());
+                ui.label(egui::RichText::new("listening…").size(16.0).weak());
             }
         });
 
-        ui.add_space(8.0);
+        ui.add_space(6.0);
         self.draw_gauge(ui);
-        ui.add_space(8.0);
-        self.draw_strobe(ui);
         ui.add_space(8.0);
         self.draw_spectrum(ui);
 
-        // Animate continuously so channel polling and the strobe keep running.
+        // Repaint continuously so the channel keeps being polled.
         ui.ctx().request_repaint();
     }
 }
 
 impl TunerApp {
+    /// An analog needle gauge in the style of `lingot-gui-gauge.c`: a cents arc
+    /// with minor/major tics and labels, a green/red in-tune band, and a red
+    /// needle hinged near the bottom.
     fn draw_gauge(&self, ui: &mut egui::Ui) {
-        let (resp, painter) =
-            ui.allocate_painter(Vec2::new(ui.available_width(), 90.0), Sense::hover());
+        let w = ui.available_width();
+        let h = (w / 1.6).min(260.0);
+        let (resp, painter) = ui.allocate_painter(Vec2::new(w, h), Sense::hover());
         let rect = resp.rect;
-        let mid_y = rect.center().y;
-        let left = rect.left() + 20.0;
-        let right = rect.right() - 20.0;
-        let span = right - left;
+        painter.rect_filled(rect, 4.0, Color32::WHITE);
 
-        // baseline + tick marks every 10 cents
-        painter.line_segment(
-            [Pos2::new(left, mid_y), Pos2::new(right, mid_y)],
-            Stroke::new(2.0, Color32::DARK_GRAY),
-        );
-        let mut c = -GAUGE_HALF_RANGE;
-        while c <= GAUGE_HALF_RANGE {
-            let x = left + span * ((c + GAUGE_HALF_RANGE) / (2.0 * GAUGE_HALF_RANGE)) as f32;
-            let h = if c == 0.0 { 18.0 } else { 10.0 };
-            let col = if c == 0.0 { Color32::GRAY } else { Color32::DARK_GRAY };
-            painter.line_segment(
-                [Pos2::new(x, mid_y - h), Pos2::new(x, mid_y + h)],
-                Stroke::new(if c == 0.0 { 2.0 } else { 1.0 }, col),
-            );
-            c += 10.0;
+        let center = Pos2::new(rect.center().x, rect.top() + h * 0.94);
+        let overture = OVERTURE_DEG.to_radians();
+        let polar = |r: f32, a: f32| Pos2::new(center.x + r * a.sin(), center.y - r * a.cos());
+
+        let ink = Color32::from_gray(20);
+        let cents_bar_r = h * 0.75;
+        let gauge_range = self.gauge_range as f32;
+
+        // in-tune band: red across the full sweep, green in the centre
+        let ok_r = h * 0.48;
+        let ok_stroke = h * 0.07;
+        arc(&painter, center, ok_r, -overture, overture,
+            Stroke::new(ok_stroke, Color32::from_rgb(221, 170, 170)));
+        arc(&painter, center, ok_r, -0.12 * overture, 0.12 * overture,
+            Stroke::new(ok_stroke, Color32::from_rgb(153, 221, 153)));
+
+        // cents arc
+        arc(&painter, center, cents_bar_r, -1.05 * overture, 1.05 * overture,
+            Stroke::new(h * 0.022, Color32::from_rgb(51, 51, 85)));
+
+        // tic spacing (lingot's adaptive division logic)
+        let (cents_per_minor, cents_per_major) = divisions(self.gauge_range);
+        let cpm = cents_per_minor as f32;
+        let cpmaj = cents_per_major as f32;
+
+        // minor tics
+        let minor_r = cents_bar_r - h * 0.03;
+        let n_minor = (0.5 * gauge_range / cpm).floor() as i32;
+        let step_minor = 2.0 * overture * cpm / gauge_range;
+        for i in -n_minor..=n_minor {
+            let a = i as f32 * step_minor;
+            painter.line_segment([polar(minor_r, a), polar(cents_bar_r, a)],
+                Stroke::new(h * 0.008, ink));
         }
+
+        // major tics + numeric labels
+        let major_r = cents_bar_r - h * 0.045;
+        let n_major = (0.5 * gauge_range / cpmaj).floor() as i32;
+        let step_major = 2.0 * overture * cpmaj / gauge_range;
+        let font = FontId::proportional(h * 0.085);
+        for i in -n_major..=n_major {
+            let a = i as f32 * step_major;
+            painter.line_segment([polar(major_r, a), polar(cents_bar_r, a)],
+                Stroke::new(h * 0.022, ink));
+            let cents = (i as f32 * cpmaj) as i32;
+            let label = if cents > 0 { format!("+{cents}") } else { format!("{cents}") };
+            painter.text(polar(major_r - h * 0.10, a), Align2::CENTER_CENTER, label,
+                font.clone(), ink);
+        }
+        painter.text(Pos2::new(center.x, center.y - major_r * 0.80), Align2::CENTER_CENTER,
+            "cent", font, ink);
 
         // needle
         if self.frequency > 0.0 {
-            let clamped = self.cents.clamp(-GAUGE_HALF_RANGE, GAUGE_HALF_RANGE);
-            let x = left
-                + span * ((clamped + GAUGE_HALF_RANGE) / (2.0 * GAUGE_HALF_RANGE)) as f32;
-            let colour = tune_colour(self.cents, true);
-            painter.line_segment(
-                [Pos2::new(x, mid_y - 28.0), Pos2::new(x, mid_y + 28.0)],
-                Stroke::new(3.0, colour),
-            );
-            painter.circle_filled(Pos2::new(x, mid_y), 5.0, colour);
-        }
-    }
-
-    /// A simple strobe disc: a ring of segments rotating at a rate set by the
-    /// pitch error. Appears to stand still when perfectly in tune.
-    fn draw_strobe(&self, ui: &mut egui::Ui) {
-        let (resp, painter) =
-            ui.allocate_painter(Vec2::new(ui.available_width(), 120.0), Sense::hover());
-        let center = resp.rect.center();
-        let radius = 50.0;
-        let segments = 16;
-
-        painter.circle_stroke(center, radius, Stroke::new(1.0, Color32::DARK_GRAY));
-        for i in 0..segments {
-            let a = self.strobe_phase + (i as f32) * 2.0 * PI / segments as f32;
-            // alternate filled/empty wedges
-            let filled = i % 2 == 0;
-            let col = if filled { Color32::from_gray(200) } else { Color32::from_gray(40) };
-            let p = center + Vec2::new(a.cos(), a.sin()) * radius;
-            painter.circle_filled(p, 6.0, col);
+            let clamped = (self.cents as f32).clamp(-gauge_range / 2.0, gauge_range / 2.0);
+            let a = 2.0 * (clamped / gauge_range) * overture;
+            let red = Color32::from_rgb(170, 51, 51);
+            painter.line_segment([polar(-h * 0.08, a), polar(h * 0.85, a)],
+                Stroke::new(h * 0.013, red));
+            painter.circle_filled(center, h * 0.045, red);
+        } else {
+            painter.circle_filled(center, h * 0.045, Color32::from_gray(150));
         }
     }
 
     fn draw_spectrum(&self, ui: &mut egui::Ui) {
         let (resp, painter) =
-            ui.allocate_painter(Vec2::new(ui.available_width(), 140.0), Sense::hover());
+            ui.allocate_painter(Vec2::new(ui.available_width(), 120.0), Sense::hover());
         let rect = resp.rect;
         painter.rect_filled(rect, 2.0, Color32::from_gray(18));
 
         if self.spd.is_empty() {
             return;
         }
-
         // SNR spectrum is in dB; map a fixed [0, 40] dB window to bar height.
         let n = self.spd.len();
         let bar_w = rect.width() / n as f32;
         for (i, &v) in self.spd.iter().enumerate() {
             let norm = (v / 40.0).clamp(0.0, 1.0) as f32;
-            let h = norm * rect.height();
             let x = rect.left() + i as f32 * bar_w;
             let bar = Rect::from_min_max(
-                Pos2::new(x, rect.bottom() - h),
+                Pos2::new(x, rect.bottom() - norm * rect.height()),
                 Pos2::new(x + bar_w.max(1.0), rect.bottom()),
             );
             painter.rect_filled(bar, 0.0, Color32::from_rgb(80, 160, 220));
         }
     }
+}
+
+/// Draw a circular arc as a polyline. Angles are measured from straight up,
+/// increasing clockwise (matching the gauge's needle convention).
+fn arc(painter: &egui::Painter, center: Pos2, radius: f32, a0: f32, a1: f32, stroke: Stroke) {
+    const SEGMENTS: usize = 48;
+    let pts: Vec<Pos2> = (0..=SEGMENTS)
+        .map(|k| {
+            let a = a0 + (a1 - a0) * k as f32 / SEGMENTS as f32;
+            Pos2::new(center.x + radius * a.sin(), center.y - radius * a.cos())
+        })
+        .collect();
+    painter.add(Shape::line(pts, stroke));
+}
+
+/// lingot's adaptive tic spacing: returns `(cents_per_minor, cents_per_major)`
+/// for a gauge spanning `gauge_range` cents (mirrors the 1/2/5/10 logic in
+/// `lingot_gui_gauge_redraw_background`).
+fn divisions(gauge_range: f64) -> (f64, f64) {
+    let mut minor = gauge_range / 20.0;
+    let base = 10f64.powf(minor.log10().floor());
+    let norm = minor / base;
+    let norm = if norm >= 6.0 {
+        10.0
+    } else if norm >= 2.5 {
+        5.0
+    } else if norm >= 1.2 {
+        2.0
+    } else {
+        1.0
+    };
+    minor = norm * base;
+    (minor, 5.0 * minor)
 }
 
 /// Green when in tune, amber when close, red when far; grey when not locked.

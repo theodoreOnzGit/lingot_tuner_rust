@@ -46,7 +46,7 @@ const OVERTURE_DEG: f32 = 65.0;
 // gauge filter (lingot-gui-mainframe.c / lingot-io-ui-settings.c defaults).
 const GAUGE_RATE: f64 = 60.0; // Hz — fixed update rate the coefficients assume
 const GAUGE_ADAPTATION: f64 = 150.0; // quicker to target as this grows
-const GAUGE_DAMPING: f64 = 15.0; // less "bounce" as this grows
+const GAUGE_DAMPING: f64 = 30.0; // less "bounce" as this grows (lingot default: 15)
 
 /// Build lingot's 2nd-order gauge-smoothing filter, primed to rest at `rest`.
 fn gauge_filter(rest: f64) -> Filter {
@@ -193,7 +193,12 @@ impl eframe::App for TunerApp {
             let colour = tune_colour(self.cents, locked);
             ui.heading(egui::RichText::new(&self.note).size(56.0).color(colour));
             if locked {
-                ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(18.0));
+                ui.label(
+                    egui::RichText::new(format!("{:+.1} cents", self.cents))
+                        .size(22.0)
+                        .color(colour),
+                );
+                ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(16.0).weak());
             } else {
                 ui.label(egui::RichText::new("listening…").size(16.0).weak());
             }

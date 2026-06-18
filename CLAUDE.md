@@ -30,10 +30,14 @@ computation thread owns the temporal buffer privately; results flow to the UI ov
 second channel. The only shared state is an `AtomicBool` stop flag — no shared-buffer
 mutex.
 
-**Layer 4 TODO:** sample-rate renegotiation. If the device won't honour the requested
-rate, the core currently only warns; it should re-derive `oversampling` and the
-dependent params (as `lingot-core.c` does) and keep the audio callback's decimation in
-sync. See `Core::start` in `lingot-tuner/src/core.rs`.
+**Decimation lives on the computation thread, not the audio callback.** The audio
+callback is a lightweight forwarder (just sends raw mono blocks); a `Decimator`
+(stateful: anti-alias IIR + decimation phase) on the computation thread does the
+filtering/downsampling. This keeps the realtime callback trivial and means
+**sample-rate renegotiation just works**: if the device won't honour the requested
+rate, `Core::start` adopts the real rate and re-derives the dependent params
+(`config.update_internal_params()`) *before* spawning the computation thread, so all
+rate-dependent DSP uses the correct rate (mirrors `lingot-core.c`).
 
 38 unit tests passing (`cargo test`), clean build with no warnings. Stateful DSP pieces
 (`Filter`, `FrequencyLocker`) are structs with `&mut self`; everything else is pure

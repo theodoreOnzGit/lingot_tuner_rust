@@ -43,6 +43,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crossbeam_channel::{bounded, Receiver, Sender};
+use uom::si::f64::Frequency;
 use uom::si::frequency::hertz;
 
 use lingot::audio::{AudioError, AudioInput, AudioInputConfig};
@@ -84,50 +85,41 @@ impl Core {
     /// Start capturing and analysing. Returns the running [`Core`] plus a
     /// receiver of [`TunerResult`]s for the UI. The audio stream is already
     /// playing on return.
-    pub fn start(config: Config) -> Result<(Self, Receiver<TunerResult>), AudioError> {
-        let oversampling = config.oversampling;
+    pub fn start(mut config: Config) -> Result<(Self, Receiver<TunerResult>), AudioError> {
         let requested_rate = config.sample_rate.get::<hertz>() as u32;
 
-        // audio thread → computation thread (decimated sample blocks)
+        // audio thread → computation thread (raw mono sample blocks)
         let (audio_tx, audio_rx) = bounded::<Vec<f64>>(64);
         // computation thread → UI (tuner results)
         let (result_tx, result_rx) = bounded::<TunerResult>(8);
-
-        // Per-callback decimation state, owned by the audio callback closure.
-        let mut antialias = (oversampling > 1)
-            .then(|| Filter::cheby_design(8, 0.5, 0.9 / oversampling as f64));
-        let mut decimation_index = 0usize;
-        let mut filter_scratch: Vec<f64> = Vec::new();
 
         let audio_config = AudioInputConfig {
             device: config.audio_device.clone(),
             sample_rate: requested_rate,
         };
 
+        // The audio callback is a lightweight forwarder: it does no rate-dependent
+        // DSP, so it can be built before the device's real sample rate is known.
+        // Filtering + decimation happen on the computation thread instead.
         let audio = AudioInput::new(&audio_config, move |block: &[f64]| {
-            let decimated = decimate(
-                block,
-                oversampling,
-                antialias.as_mut(),
-                &mut decimation_index,
-                &mut filter_scratch,
-            );
             // Drop the block if the computation thread is lagging rather than
             // block the realtime audio thread.
-            let _ = audio_tx.try_send(decimated);
+            let _ = audio_tx.try_send(block.to_vec());
         })?;
 
-        // TODO(Layer 4): sample-rate renegotiation. If the device won't honour
-        // the requested rate, re-derive `oversampling` and the dependent config
-        // params (as lingot-core.c does) and rebuild the callback's decimation
-        // to match, instead of only warning. See /CLAUDE.md "Layer 4 TODO".
-        if audio.sample_rate() != requested_rate {
+        // Sample-rate renegotiation: if the device won't honour the requested
+        // rate, adopt its real rate and re-derive the dependent parameters
+        // (oversampling, fft/buffer sizes, …) — as lingot-core.c does. Because
+        // the renegotiation happens before the computation thread is spawned,
+        // everything downstream uses the correct rate.
+        let real_rate = audio.sample_rate();
+        if real_rate != requested_rate {
             eprintln!(
-                "warning: requested sample rate {} Hz unavailable; device is using {} Hz \
-                 (tuning may be slightly off until rate negotiation is implemented)",
-                requested_rate,
-                audio.sample_rate()
+                "info: input device runs at {real_rate} Hz (requested {requested_rate} Hz); \
+                 adapting analysis parameters"
             );
+            config.sample_rate = Frequency::new::<hertz>(real_rate as f64);
+            config.update_internal_params();
         }
 
         let stop = Arc::new(AtomicBool::new(false));
@@ -181,14 +173,16 @@ fn run_computation(
     stop: Arc<AtomicBool>,
 ) {
     let tick = Duration::from_secs_f64(1.0 / config.calculation_rate.get::<hertz>());
+    let mut decimator = Decimator::new(config.oversampling);
     let mut analyzer = Analyzer::new(config);
 
     while !stop.load(Ordering::Relaxed) {
         let started = Instant::now();
 
-        // Append everything captured since the last tick.
+        // Filter + decimate everything captured since the last tick, then append.
         while let Ok(block) = audio_rx.try_recv() {
-            analyzer.push_block(&block);
+            let decimated = decimator.process(&block);
+            analyzer.push_block(&decimated);
         }
 
         let (frequency, spd) = analyzer.compute();
@@ -202,37 +196,56 @@ fn run_computation(
     }
 }
 
-/// Filter + decimate one captured block (the audio-thread half of lingot's
-/// `lingot_core_read_callback`). With `oversampling == 1` it is a pass-through.
-fn decimate(
-    block: &[f64],
-    oversampling: u32,
-    filter: Option<&mut Filter>,
-    decimation_index: &mut usize,
-    scratch: &mut Vec<f64>,
-) -> Vec<f64> {
-    if oversampling <= 1 {
-        return block.to_vec();
-    }
-    let step = oversampling as usize;
+/// Anti-alias filtering + decimation of the captured stream — the
+/// computation-thread equivalent of the decimation half of lingot's
+/// `lingot_core_read_callback`. Stateful: the IIR filter and the decimation
+/// phase carry across blocks, so a single `Decimator` must process the whole
+/// stream in order.
+struct Decimator {
+    oversampling: usize,
+    antialias: Option<Filter>,
+    /// Phase carried into the next block, for continuous downsampling.
+    phase: usize,
+    scratch: Vec<f64>,
+}
 
-    // Anti-alias low-pass before downsampling.
-    scratch.clear();
-    scratch.extend_from_slice(block);
-    if let Some(f) = filter {
-        let input: Vec<f64> = scratch.clone();
-        f.filter(&input, scratch);
+impl Decimator {
+    fn new(oversampling: u32) -> Self {
+        // 8th-order Chebyshev low-pass at wc = 0.9 / oversampling (10% margin
+        // below Nyquist) to prevent aliasing at decimation.
+        let antialias =
+            (oversampling > 1).then(|| Filter::cheby_design(8, 0.5, 0.9 / oversampling as f64));
+        Decimator {
+            oversampling: oversampling as usize,
+            antialias,
+            phase: 0,
+            scratch: Vec::new(),
+        }
     }
 
-    let mut out = Vec::with_capacity(scratch.len() / step + 1);
-    let mut i = *decimation_index;
-    while i < scratch.len() {
-        out.push(scratch[i]);
-        i += step;
+    /// Filter and downsample one captured block. With `oversampling == 1` it is
+    /// a pass-through.
+    fn process(&mut self, block: &[f64]) -> Vec<f64> {
+        if self.oversampling <= 1 {
+            return block.to_vec();
+        }
+
+        self.scratch.clear();
+        self.scratch.extend_from_slice(block);
+        if let Some(f) = &mut self.antialias {
+            let input: Vec<f64> = self.scratch.clone();
+            f.filter(&input, &mut self.scratch);
+        }
+
+        let mut out = Vec::with_capacity(self.scratch.len() / self.oversampling + 1);
+        let mut i = self.phase;
+        while i < self.scratch.len() {
+            out.push(self.scratch[i]);
+            i += self.oversampling;
+        }
+        self.phase = i - self.scratch.len();
+        out
     }
-    // Carry the leftover phase into the next block for continuity.
-    *decimation_index = i - scratch.len();
-    out
 }
 
 /// Owns the temporal buffer and all per-analysis scratch state. Runs the
@@ -460,11 +473,30 @@ mod tests {
     }
 
     #[test]
-    fn decimate_passthrough_when_oversampling_one() {
-        let mut idx = 0;
-        let mut scratch = Vec::new();
-        let out = decimate(&[1.0, 2.0, 3.0], 1, None, &mut idx, &mut scratch);
-        assert_eq!(out, vec![1.0, 2.0, 3.0]);
+    fn decimator_passthrough_when_oversampling_one() {
+        let mut d = Decimator::new(1);
+        assert_eq!(d.process(&[1.0, 2.0, 3.0]), vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn decimator_downsamples_and_carries_phase() {
+        // oversampling 4: roughly one in four samples survives, and the phase
+        // carries across block boundaries so the stream stays evenly sampled.
+        let mut d = Decimator::new(4);
+        let n_in = 400;
+        let stream: Vec<f64> = (0..n_in).map(|i| i as f64).collect();
+
+        // process in two halves; the total decimated count should match a
+        // single-pass decimation (continuity across the boundary).
+        let mut split = d.process(&stream[..150]);
+        split.extend(d.process(&stream[150..]));
+
+        let mut whole = Decimator::new(4);
+        let single = whole.process(&stream);
+
+        // Filtering differs at block edges, so compare counts, not values.
+        assert_eq!(split.len(), single.len());
+        assert!((split.len() as i64 - n_in / 4).abs() <= 1);
     }
 
     #[test]

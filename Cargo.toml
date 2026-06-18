@@ -6,5 +6,6 @@ description = "A musical instrument tuner — Rust rewrite of lingot"
 license = "GPL-3.0-or-later"
 
 [dependencies]
+num-complex = "0.4.6"
 rustfft = "6.4.1"
 uom = "0.38.0"

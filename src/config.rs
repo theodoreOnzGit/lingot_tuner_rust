@@ -32,14 +32,7 @@ use uom::si::frequency::hertz;
 use uom::si::time::second;
 
 use crate::scale::Scale;
-
-/// Analysis window applied before the FFT.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WindowType {
-    None,
-    Hanning,
-    Hamming,
-}
+use crate::window::WindowType;
 
 #[derive(Clone, Debug)]
 pub struct Config {

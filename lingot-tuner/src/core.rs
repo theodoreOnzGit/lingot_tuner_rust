@@ -117,6 +117,10 @@ impl Core {
             let _ = audio_tx.try_send(decimated);
         })?;
 
+        // TODO(Layer 4): sample-rate renegotiation. If the device won't honour
+        // the requested rate, re-derive `oversampling` and the dependent config
+        // params (as lingot-core.c does) and rebuild the callback's decimation
+        // to match, instead of only warning. See /CLAUDE.md "Layer 4 TODO".
         if audio.sample_rate() != requested_rate {
             eprintln!(
                 "warning: requested sample rate {} Hz unavailable; device is using {} Hz \

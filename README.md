@@ -6,13 +6,15 @@ A musical instrument tuner — Rust rewrite of [lingot](https://github.com/ibanc
 
 ### Threading model
 
-Three concurrent entities communicate via shared state:
+Three concurrent entities cooperate:
 
 - **Audio thread** — hardware callback, fires continuously with raw PCM chunks
 - **Computation thread** — runs the DSP pipeline at a fixed `calculation_rate`
 - **GUI thread** — polls results at its own redraw rate
 
-Two mutexes mediate them: one guards the temporal sample buffer (audio ↔ computation), another guards the frequency/SPD results (computation ↔ GUI).
+**Original C (lingot):** the three share state behind **two mutexes** — one guards the temporal sample buffer (audio ↔ computation), another guards the frequency/SPD results (computation ↔ GUI).
+
+**This Rust rewrite:** the same entities communicate by **message passing** instead. The audio callback filters, decimates, and *sends* sample blocks over a channel; the computation thread owns the temporal buffer privately (no lock needed), and sends results to the UI over a second channel. The only shared state is an atomic stop flag. This removes the shared-buffer mutex entirely and keeps each buffer owned by a single thread.
 
 ### 1. Audio capture and decimation (audio thread)
 
@@ -56,15 +58,52 @@ The GUI reads the latest frequency and noise-subtracted SPD (copied under the re
 
 ## Building
 
+The project is a Cargo workspace with two crates:
+
+- **`lingot/`** — the library: config/scale types, signal processing, and audio capture.
+- **`lingot-tuner/`** — the binary: the core loop and (eventually) the GUI.
+
+From the workspace root:
+
 ```
 cargo build --release
 ```
 
 ## Running
 
+A graphical frontend is not built yet. The current binary is a **command-line
+tuner** that listens on your default input device and prints the detected pitch.
+From the workspace root:
+
 ```
-cargo run
+cargo run -p lingot-tuner
 ```
+
+`cargo run` on its own works too (it is the only binary in the workspace). For
+smoother, lower-latency analysis, build optimised:
+
+```
+cargo run -p lingot-tuner --release
+```
+
+It prints a line whenever it locks onto a tone, for example:
+
+```
+lingot-tuner — listening (Ctrl-C to quit)
+
+  220.00 Hz   A3    +0.3 cents
+```
+
+Notes:
+
+- **Silence produces no output** — the frequency locker needs several consistent
+  readings before it reports a pitch.
+- The default configuration covers the guitar range (E2–E4, ~82–330 Hz). Play or
+  whistle within that range to see it track.
+- It captures from the **system default input device**. On PulseAudio/PipeWire you
+  can pick a specific microphone first with `pactl set-default-source <name>`
+  (list candidates with `pactl list short sources`).
+- Quit with **Ctrl-C**.
 
 ## License
 

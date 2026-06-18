@@ -9,9 +9,25 @@ The original C source lives at `../lingot/src/` and is the reference implementat
 |---|---|---|
 | 1 — Config & Scale | ✅ done (file I/O deferred) | `defs.rs`, `scale.rs`, `config.rs` |
 | 2 — Signal processing | ✅ done | `fft.rs`, `window.rs`, `filter.rs`, `signal.rs` |
-| 3 — Audio capture (cpal) | ✅ done | `audio.rs` |
-| 4 — Core loop | ⬜ next | — |
-| 5 — GUI (egui) | ⬜ | — |
+| 3 — Audio capture (cpal) | ✅ done | `lingot/src/audio.rs` |
+| 4 — Core loop | ✅ done (verified on real guitar) | `lingot-tuner/src/core.rs` |
+| 5 — GUI (egui) | ⬜ next | — |
+
+**Now a Cargo workspace:** `lingot/` (library, Layers 1–3) + `lingot-tuner/`
+(binary, Layers 4–5). `crossbeam-channel` is a binary-only dependency.
+
+**Core concurrency — the key C→Rust difference:** lingot guards a shared
+`temporal_buffer` with a mutex (audio ↔ computation) and the results with another
+mutex (computation ↔ UI). The Rust core instead uses **message passing**: the audio
+callback filters+decimates and *sends* blocks over a `crossbeam` channel; the
+computation thread owns the temporal buffer privately; results flow to the UI over a
+second channel. The only shared state is an `AtomicBool` stop flag — no shared-buffer
+mutex.
+
+**Layer 4 TODO:** sample-rate renegotiation. If the device won't honour the requested
+rate, the core currently only warns; it should re-derive `oversampling` and the
+dependent params (as `lingot-core.c` does) and keep the audio callback's decimation in
+sync. See `Core::start` in `lingot-tuner/src/core.rs`.
 
 38 unit tests passing (`cargo test`), clean build with no warnings. Stateful DSP pieces
 (`Filter`, `FrequencyLocker`) are structs with `&mut self`; everything else is pure

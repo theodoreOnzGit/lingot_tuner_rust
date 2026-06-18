@@ -11,7 +11,13 @@ The original C source lives at `../lingot/src/` and is the reference implementat
 | 2 — Signal processing | ✅ done | `fft.rs`, `window.rs`, `filter.rs`, `signal.rs` |
 | 3 — Audio capture (cpal) | ✅ done | `lingot/src/audio.rs` |
 | 4 — Core loop | ✅ done (verified on real guitar) | `lingot-tuner/src/core.rs` |
-| 5 — GUI (egui) | ⬜ next | — |
+| 5 — GUI (egui) | ✅ done (builds + launches) | `lingot-tuner/src/gui.rs` |
+
+**Two binaries** in the `lingot-tuner` package: `lingot-tuner` (GUI, behind the
+optional `gui` feature → `eframe`) and `lingot-tuner-cli` (CLI, always builds, no
+GUI deps). Shared code (`core`, `note`) lives in this package's own internal
+`lib.rs` — distinct from the reusable `lingot` library. eframe 0.34: the `App`
+trait's required method is now `ui(&mut self, ui, frame)` (not `update`).
 
 **Now a Cargo workspace:** `lingot/` (library, Layers 1–3) + `lingot-tuner/`
 (binary, Layers 4–5). `crossbeam-channel` is a binary-only dependency.

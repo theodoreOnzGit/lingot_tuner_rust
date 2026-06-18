@@ -73,9 +73,17 @@ cargo build --release
 
 The `lingot-tuner` package builds two binaries:
 
-- **`lingot-tuner-cli`** — a working command-line tuner (always builds).
-- **`lingot-tuner`** — the egui GUI; behind the optional `gui` feature and **not
-  yet finished**.
+- **`lingot-tuner`** — the graphical (egui) tuner, behind the optional `gui` feature.
+- **`lingot-tuner-cli`** — a command-line tuner (always builds, no GUI dependencies).
+
+### GUI tuner
+
+The graphical tuner shows the note, cent deviation, a tuning gauge, a strobe
+disc, and a live spectrum. It is behind the `gui` feature:
+
+```
+cargo run --release --bin lingot-tuner --features gui
+```
 
 ### CLI tuner
 

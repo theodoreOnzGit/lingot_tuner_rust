@@ -111,7 +111,9 @@ impl TunerApp {
 }
 
 impl eframe::App for TunerApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    // eframe 0.34: `ui` is the required method; the given `Ui` is the root
+    // central panel (no margin/background).
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.drain_results();
 
         let dt = self.last_frame.elapsed().as_secs_f32();
@@ -121,37 +123,33 @@ impl eframe::App for TunerApp {
             self.strobe_phase += dt * self.cents as f32 * 0.25;
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(12.0);
-                let locked = self.frequency > 0.0;
-                let colour = tune_colour(self.cents, locked);
+        ui.vertical_centered(|ui| {
+            ui.add_space(12.0);
+            let locked = self.frequency > 0.0;
+            let colour = tune_colour(self.cents, locked);
 
-                ui.heading(egui::RichText::new(&self.note).size(64.0).color(colour));
-                if locked {
-                    ui.label(
-                        egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(20.0),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!("{:+.1} cents", self.cents))
-                            .size(18.0)
-                            .color(colour),
-                    );
-                } else {
-                    ui.label(egui::RichText::new("listening…").size(18.0).weak());
-                }
-            });
-
-            ui.add_space(8.0);
-            self.draw_gauge(ui);
-            ui.add_space(8.0);
-            self.draw_strobe(ui);
-            ui.add_space(8.0);
-            self.draw_spectrum(ui);
+            ui.heading(egui::RichText::new(&self.note).size(64.0).color(colour));
+            if locked {
+                ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(20.0));
+                ui.label(
+                    egui::RichText::new(format!("{:+.1} cents", self.cents))
+                        .size(18.0)
+                        .color(colour),
+                );
+            } else {
+                ui.label(egui::RichText::new("listening…").size(18.0).weak());
+            }
         });
 
+        ui.add_space(8.0);
+        self.draw_gauge(ui);
+        ui.add_space(8.0);
+        self.draw_strobe(ui);
+        ui.add_space(8.0);
+        self.draw_spectrum(ui);
+
         // Animate continuously so channel polling and the strobe keep running.
-        ctx.request_repaint();
+        ui.ctx().request_repaint();
     }
 }
 

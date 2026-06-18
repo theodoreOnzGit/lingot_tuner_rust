@@ -43,6 +43,23 @@ The project is structured in layers, built bottom-up:
 - Replicate the core UI of lingot: tuning gauge, spectrum display, strobe disc.
 - The GUI polls or receives frequency results from the core via a channel — it must never block the audio thread.
 
+## DSP pipeline (how the original works)
+
+Understanding this is essential before touching any signal processing code.
+
+**Audio thread** receives raw PCM and appends it to a sliding `temporal_buffer` (a ring-queue). If `oversampling > 1`, an 8th-order Chebyshev IIR anti-alias filter runs first, then the signal is downsampled by taking every Nth sample.
+
+**Computation thread** runs at `calculation_rate` Hz. Each iteration:
+
+1. **Window + FFT** — take the most recent `fft_size` samples, apply Hanning/Hamming window, run FFT. Compute SPD as normalized squared magnitude in dB.
+2. **Noise floor subtraction** — a short-window IIR smooths the SPD into a noise estimate; subtract it to get an SNR spectrum.
+3. **Peak detection** — find the top N peaks above the SNR threshold. Refine each peak's subbin frequency using **Quinn's 2nd estimator** (complex interpolation over the three surrounding FFT bins).
+4. **Harmonic analysis** — for each peak / divisor (up to 4), test how many other peaks are integer multiples. A quality score (sum of related-peak SNRs, weighted by frequency) picks the best fundamental. This is how lingot finds the true fundamental even when the lowest partial is weak or absent.
+5. **Newton-Raphson refinement (two passes)** — refine with NR on the analytic DTFT power derivatives (`lingot_fft_spd_diffs_eval`). Pass 1 uses the FFT window; pass 2 uses the full (longer) `temporal_buffer` for higher resolution. This is the main accuracy mechanism — resolution scales with window length, not FFT size.
+6. **Frequency locker** — state machine that requires N consistent readings to lock, N failures to unlock, and handles octave-jump artifacts.
+
+**GUI thread** reads frequency + SPD (under a mutex) and renders the gauge, spectrum, and strobe disc.
+
 ## Reference files (original C)
 
 | Concern | C file |

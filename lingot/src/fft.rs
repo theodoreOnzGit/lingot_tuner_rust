@@ -111,9 +111,18 @@ pub fn spd_eval(
 /// Returns `(d0, d1, d2)`. Used by Newton-Raphson to refine a peak to
 /// sub-bin precision — see `lingot_fft_spd_diffs_eval`.
 pub fn spd_diffs_eval(input: &[f64], sample_rate: Frequency, f: Frequency) -> (f64, f64, f64) {
+    let w = 2.0 * PI * f.get::<hertz>() / sample_rate.get::<hertz>(); // rad/sample
+    spd_diffs_eval_w(input, w)
+}
+
+/// SPD value and its first and second derivatives w.r.t. the angular frequency
+/// `w` (radians per sample). This is the form used directly by the core's
+/// Newton-Raphson refinement and matches `lingot_fft_spd_diffs_eval`.
+///
+/// The derivatives `d1`, `d2` are taken with respect to `w`.
+pub fn spd_diffs_eval_w(input: &[f64], w: f64) -> (f64, f64, f64) {
     let n = input.len() as f64;
     let n2 = n * n;
-    let w = 2.0 * PI * f.get::<hertz>() / sample_rate.get::<hertz>(); // rad/sample
 
     let (mut sc, mut ss, mut snc, mut sns, mut sn2c, mut sn2s) =
         (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);

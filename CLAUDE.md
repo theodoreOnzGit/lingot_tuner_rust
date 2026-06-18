@@ -27,11 +27,23 @@ runs on the realtime thread — keep it lightweight (push into a channel; no blo
 
 ## Crate layout
 
-- **`src/lib.rs`** — the `lingot_tuner_rust` library crate. All reusable, testable
-  modules live here (signal processing, config, core). Declared via `pub mod`.
-- **`src/main.rs`** — the binary entry point. Depends on the library
-  (`use lingot_tuner_rust::...`) and wires up audio capture + GUI.
-- Keep logic in the library; `main.rs` should stay thin.
+There is a hard boundary between the library and the binary:
+
+- **`src/lib.rs` — the library crate (Layers 1–3 only).** Pure, reusable, testable
+  primitives: config/scale types, signal processing, and the `audio` capture wrapper.
+  Declared via `pub mod`. **The library must NOT contain `egui`/`eframe`, application-level
+  threading/orchestration, channels between threads, or the core loop.** It exposes
+  building blocks (e.g. `AudioInput` takes a callback); it does not spawn or coordinate
+  threads itself. (cpal's own internal realtime thread is encapsulated inside `audio.rs`
+  and doesn't count — the rule is about *our* orchestration.)
+- **`src/main.rs` — the binary crate (Layers 4–5 only).** Depends on the library
+  (`use lingot_tuner_rust::...`) and owns everything application-specific: the core loop,
+  the multithreading/channel wiring that connects audio → DSP → UI, and the `egui` GUI.
+  Layer 4/5 code lives in modules declared from `main.rs` (`mod core; mod gui;`), **not**
+  in `lib.rs`.
+
+Rationale: keep the DSP/audio library free of UI and concurrency policy so it stays
+portable and unit-testable; confine threading and `egui` to the application.
 
 ## Architecture
 
@@ -53,14 +65,14 @@ The project is structured in layers, built bottom-up:
 - No ALSA/JACK/OSS/PulseAudio direct calls — `cpal` abstracts these.
 - Audio delivers samples via a callback; keep the callback lightweight (no allocation, no blocking).
 
-### 4. Core loop
+### 4. Core loop  *(binary only — lives in `main.rs` modules, not `lib.rs`)*
 - Ties audio capture → signal processing → frequency result.
 - Mirror the threading model of `lingot-core.h`: audio runs on its own thread, results are shared with the UI thread.
 - Use `Arc` for shared state where needed, but **minimise shared mutable state** to avoid data races.
 - Prefer message-passing (`std::sync::mpsc` or `crossbeam`) over mutex-guarded shared buffers wherever possible.
 - Mutex usage is acceptable when unavoidable, but document why at each site.
 
-### 5. GUI
+### 5. GUI  *(binary only — lives in `main.rs` modules, not `lib.rs`)*
 - Use **egui** (via `eframe`).
 - Replicate the core UI of lingot: tuning gauge, spectrum display, strobe disc.
 - The GUI polls or receives frequency results from the core via a channel — it must never block the audio thread.

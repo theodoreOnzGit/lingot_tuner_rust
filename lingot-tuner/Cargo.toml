@@ -1,0 +1,13 @@
+[package]
+name = "lingot-tuner"
+description = "A musical instrument tuner — Rust rewrite of lingot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Binary crate: Layers 4-5 (core loop + GUI). Owns all application-level
+# threading and the egui frontend. Depends on the `lingot` library.
+[dependencies]
+lingot = { path = "../lingot" }
+crossbeam-channel = "0.5"
+uom = "0.38.0"

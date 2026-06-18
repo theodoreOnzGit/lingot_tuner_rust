@@ -48,20 +48,22 @@ This two-stage refinement (FFT bin → Quinn interpolation → Newton-Raphson on
 
 A state machine filters out transient glitches. It requires several consistent readings before "locking" onto a note, and several consecutive failures before unlocking. It also handles **octave jumps** (half/double frequency detections) by requiring a run of consistent readings before re-locking at the new octave.
 
-### 3. GUI
+### 3. Frontends
 
-The GUI reads the latest frequency and noise-subtracted SPD (copied under the results mutex) at its own redraw rate and renders:
+In this rewrite the computation thread sends each result (frequency + noise-subtracted SPD) to the frontend over a channel; the frontend renders at its own rate. Two frontends share the same core:
 
-- **Tuning gauge** — deviation from the nearest note in cents
-- **Spectrum display** — the noise-subtracted SPD
-- **Strobe disc** — a rotating pattern whose speed reflects pitch error
+- **`lingot-tuner-cli`** — prints the detected note, cents, and frequency to the terminal.
+- **`lingot-tuner`** — an [egui](https://github.com/emilk/egui) GUI rendering:
+  - the **note name**, the **cents off-tune**, and the **frequency**;
+  - an **analog tuning gauge** in the style of lingot's cairo gauge — a cents arc with minor/major tics and labels, a green/red in-tune band, and a needle hinged near the bottom. The needle is smoothed by a 2nd-order "damped spring" IIR filter (ported from lingot) driven at a fixed 60 Hz, and rests near the left (`gauge_rest_value`) when no pitch is present;
+  - a live **spectrum** view of the SNR distribution.
 
 ## Building
 
 The project is a Cargo workspace with two crates:
 
-- **`lingot/`** — the library: config/scale types, signal processing, and audio capture.
-- **`lingot-tuner/`** — the binary: the core loop and (eventually) the GUI.
+- **`lingot/`** — the library (Layers 1–3): config/scale types, signal processing, and audio capture. No GUI or threading dependencies.
+- **`lingot-tuner/`** — the binary package (Layers 4–5): the core loop and the CLI/GUI frontends.
 
 From the workspace root:
 

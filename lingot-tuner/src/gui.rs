@@ -200,6 +200,11 @@ impl eframe::App for TunerApp {
                 );
                 ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(16.0).weak());
             } else {
+                ui.label(
+                    egui::RichText::new(format!("------ cents"))
+                        .size(22.0)
+                        .color(colour),
+                );
                 ui.label(egui::RichText::new("listening…").size(16.0).weak());
             }
         });
@@ -276,7 +281,7 @@ impl TunerApp {
             painter.text(polar(major_r * 0.93, a), Align2::CENTER_CENTER, label,
                 font.clone(), ink);
         }
-        painter.text(Pos2::new(center.x, center.y - major_r * 0.78), Align2::CENTER_CENTER,
+        painter.text(Pos2::new(center.x, center.y - major_r * 0.805), Align2::CENTER_CENTER,
             "cent", font, ink);
 
         // needle — uses the smoothed gauge position (which glides toward the

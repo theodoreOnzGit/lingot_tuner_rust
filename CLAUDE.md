@@ -9,13 +9,21 @@ The original C source lives at `../lingot/src/` and is the reference implementat
 |---|---|---|
 | 1 — Config & Scale | ✅ done (file I/O deferred) | `defs.rs`, `scale.rs`, `config.rs` |
 | 2 — Signal processing | ✅ done | `fft.rs`, `window.rs`, `filter.rs`, `signal.rs` |
-| 3 — Audio capture (cpal) | ⬜ next | — |
-| 4 — Core loop | ⬜ | — |
+| 3 — Audio capture (cpal) | ✅ done | `audio.rs` |
+| 4 — Core loop | ⬜ next | — |
 | 5 — GUI (egui) | ⬜ | — |
 
-34 unit tests passing (`cargo test`). Stateful DSP pieces (`Filter`, `FrequencyLocker`)
-are structs with `&mut self`; everything else is pure functions. `WindowType` lives in
-`window.rs`. `FftPlan::spectrum()` exposes the complex FFT for Quinn interpolation.
+38 unit tests passing (`cargo test`), clean build with no warnings. Stateful DSP pieces
+(`Filter`, `FrequencyLocker`) are structs with `&mut self`; everything else is pure
+functions. `WindowType` lives in `window.rs`. `FftPlan::spectrum()` exposes the complex
+FFT for Quinn interpolation.
+
+**Audio (Layer 3) notes:** cpal inverts lingot's model — it drives its own realtime
+thread and calls our data callback (no blocking-read mainloop). The whole C multi-backend
+registry collapses into one `audio.rs`. `AudioInput::new(config, callback)` delivers mono
+`f64` blocks (normalised to `[-1,1]`, multi-channel downmixed by averaging). The callback
+runs on the realtime thread — keep it lightweight (push into a channel; no blocking/alloc).
+`sample_rate()` may differ from the request; `is_healthy()` mirrors lingot's `interrupted`.
 
 ## Crate layout
 
@@ -100,7 +108,8 @@ const MID_C_FREQUENCY: f64 = 261.625565; // Hz
 | `uom` | Physical units in signal processing | added |
 | `rustfft` | FFT implementation | added |
 | `num-complex` | Complex math for Chebyshev pole/bilinear design | added |
-| `cpal` | Cross-platform audio input (Linux + Windows) | Layer 3 |
+| `cpal` | Cross-platform audio input (Linux + Windows) | added |
+| `thiserror` | Library error types (`AudioError`) | added |
 | `eframe` + `egui` | GUI | Layer 5 |
 | `crossbeam-channel` | Efficient channels between threads | Layer 4 |
 

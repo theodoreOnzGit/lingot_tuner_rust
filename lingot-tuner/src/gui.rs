@@ -271,10 +271,12 @@ impl TunerApp {
                 Stroke::new(h * 0.022, ink));
             let cents = (i as f32 * cpmaj) as i32;
             let label = if cents > 0 { format!("+{cents}") } else { format!("{cents}") };
-            painter.text(polar(major_r - h * 0.10, a), Align2::CENTER_CENTER, label,
+            // Numbers sit just inside the tics; the "cent" label sits lower
+            // (just above the green band) so the two never overlap at the top.
+            painter.text(polar(major_r * 0.93, a), Align2::CENTER_CENTER, label,
                 font.clone(), ink);
         }
-        painter.text(Pos2::new(center.x, center.y - major_r * 0.80), Align2::CENTER_CENTER,
+        painter.text(Pos2::new(center.x, center.y - major_r * 0.78), Align2::CENTER_CENTER,
             "cent", font, ink);
 
         // needle — uses the smoothed gauge position (which glides toward the

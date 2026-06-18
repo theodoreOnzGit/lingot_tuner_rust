@@ -22,8 +22,17 @@
  * along with lingot_tuner_rust. If not, see <https://www.gnu.org/licenses/>.
  */
 
-//! GUI tuner entry point (`lingot-tuner`).
+//! Shared note-mapping helper used by both the CLI and GUI frontends.
 
-fn main() -> eframe::Result<()> {
-    lingot_tuner::gui::run()
+use lingot::scale::Scale;
+use uom::si::f64::Frequency;
+use uom::si::frequency::hertz;
+
+/// Map a frequency to its nearest note name (with octave) and the deviation in
+/// cents. The scale's base note (index 0) is C4, so octave 4 is added.
+pub fn nearest_note(scale: &Scale, frequency: f64) -> (String, f64) {
+    let (index, cents) = scale.closest_note_index(Frequency::new::<hertz>(frequency), 0.0);
+    let note = &scale.notes()[scale.note_index(index) as usize];
+    let octave = 4 + scale.octave(index);
+    (format!("{}{}", note.name, octave), cents)
 }

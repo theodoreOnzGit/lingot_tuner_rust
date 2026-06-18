@@ -11,3 +11,20 @@ license.workspace = true
 lingot = { path = "../lingot" }
 crossbeam-channel = "0.5"
 uom = "0.38.0"
+eframe = { version = "0.34.3", optional = true }
+
+[features]
+# The GUI frontend (egui/eframe). Off by default so the CLI builds without
+# pulling in the graphics stack.
+gui = ["dep:eframe"]
+
+# The graphical tuner. Only builds when the `gui` feature is enabled.
+[[bin]]
+name = "lingot-tuner"
+path = "src/main.rs"
+required-features = ["gui"]
+
+# The command-line tuner. Always builds; no GUI dependencies.
+[[bin]]
+name = "lingot-tuner-cli"
+path = "src/bin/lingot-tuner-cli.rs"

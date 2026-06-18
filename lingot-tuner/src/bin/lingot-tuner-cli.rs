@@ -22,8 +22,34 @@
  * along with lingot_tuner_rust. If not, see <https://www.gnu.org/licenses/>.
  */
 
-//! GUI tuner entry point (`lingot-tuner`).
+//! Command-line tuner entry point (`lingot-tuner-cli`): prints the detected
+//! pitch as text. The graphical frontend is the default `lingot-tuner` binary.
 
-fn main() -> eframe::Result<()> {
-    lingot_tuner::gui::run()
+use lingot::config::Config;
+use lingot_tuner::core::Core;
+use lingot_tuner::note::nearest_note;
+
+fn main() {
+    let config = Config::default();
+    let scale = config.scale.clone();
+
+    let (_core, results) = match Core::start(config) {
+        Ok(running) => running,
+        Err(e) => {
+            eprintln!("failed to start audio: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    println!("lingot-tuner-cli — listening (Ctrl-C to quit)\n");
+
+    for result in results.iter() {
+        if result.frequency > 0.0 {
+            let (note, cents) = nearest_note(&scale, result.frequency);
+            println!(
+                "{:8.2} Hz   {:<4}  {:+6.1} cents",
+                result.frequency, note, cents
+            );
+        }
+    }
 }

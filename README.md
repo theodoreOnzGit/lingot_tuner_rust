@@ -71,22 +71,23 @@ cargo build --release
 
 ## Running
 
-A graphical frontend is not built yet. The current binary is a **command-line
-tuner** that listens on your default input device and prints the detected pitch.
-From the workspace root:
+The `lingot-tuner` package builds two binaries:
+
+- **`lingot-tuner-cli`** — a working command-line tuner (always builds).
+- **`lingot-tuner`** — the egui GUI; behind the optional `gui` feature and **not
+  yet finished**.
+
+### CLI tuner
+
+Run the command-line tuner in release mode (recommended for smooth, low-latency
+analysis):
 
 ```
-cargo run -p lingot-tuner
+cargo run --release --bin lingot-tuner-cli
 ```
 
-`cargo run` on its own works too (it is the only binary in the workspace). For
-smoother, lower-latency analysis, build optimised:
-
-```
-cargo run -p lingot-tuner --release
-```
-
-It prints a line whenever it locks onto a tone, for example:
+It listens on your default input device and prints a line whenever it locks onto
+a tone, for example:
 
 ```
 lingot-tuner — listening (Ctrl-C to quit)

@@ -22,8 +22,14 @@
  * along with lingot_tuner_rust. If not, see <https://www.gnu.org/licenses/>.
  */
 
-//! GUI tuner entry point (`lingot-tuner`).
+//! Application-internal library for the `lingot-tuner` package.
+//!
+//! This is **not** the reusable `lingot` library (Layers 1-3) — it exists only
+//! to share the core loop and note-mapping helpers between this package's two
+//! binaries: `lingot-tuner` (GUI) and `lingot-tuner-cli` (CLI). It is allowed to
+//! contain application-level threading and `egui` code.
 
-fn main() -> eframe::Result<()> {
-    lingot_tuner::gui::run()
-}
+pub mod core;
+#[cfg(feature = "gui")]
+pub mod gui;
+pub mod note;

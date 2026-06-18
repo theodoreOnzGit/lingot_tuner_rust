@@ -1,0 +1,10 @@
+[package]
+name = "lingot_tuner_rust"
+version = "0.1.0"
+edition = "2021"
+description = "A musical instrument tuner — Rust rewrite of lingot"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+rustfft = "6.4.1"
+uom = "0.38.0"

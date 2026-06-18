@@ -3,6 +3,20 @@
 A Rust rewrite of [lingot](https://github.com/ibancg/lingot), a musical instrument tuner.
 The original C source lives at `../lingot/src/` and is the reference implementation.
 
+## Status
+
+| Layer | State | Modules |
+|---|---|---|
+| 1 — Config & Scale | ✅ done (file I/O deferred) | `defs.rs`, `scale.rs`, `config.rs` |
+| 2 — Signal processing | ✅ done | `fft.rs`, `window.rs`, `filter.rs`, `signal.rs` |
+| 3 — Audio capture (cpal) | ⬜ next | — |
+| 4 — Core loop | ⬜ | — |
+| 5 — GUI (egui) | ⬜ | — |
+
+34 unit tests passing (`cargo test`). Stateful DSP pieces (`Filter`, `FrequencyLocker`)
+are structs with `&mut self`; everything else is pure functions. `WindowType` lives in
+`window.rs`. `FftPlan::spectrum()` exposes the complex FFT for Quinn interpolation.
+
 ## Crate layout
 
 - **`src/lib.rs`** — the `lingot_tuner_rust` library crate. All reusable, testable
@@ -81,13 +95,19 @@ const MID_C_FREQUENCY: f64 = 261.625565; // Hz
 
 ## Cargo.toml dependencies
 
-| Crate | Purpose |
-|---|---|
-| `uom` | Physical units in signal processing |
-| `cpal` | Cross-platform audio input (Linux + Windows) |
-| `rustfft` | FFT implementation |
-| `eframe` + `egui` | GUI |
-| `crossbeam-channel` | Efficient channels between threads |
+| Crate | Purpose | Status |
+|---|---|---|
+| `uom` | Physical units in signal processing | added |
+| `rustfft` | FFT implementation | added |
+| `num-complex` | Complex math for Chebyshev pole/bilinear design | added |
+| `cpal` | Cross-platform audio input (Linux + Windows) | Layer 3 |
+| `eframe` + `egui` | GUI | Layer 5 |
+| `crossbeam-channel` | Efficient channels between threads | Layer 4 |
+
+Deliberately **not** used: `apodize`/`dasp_window` (windowing), `biquad`, `sci-rs`
+(filter design). Window, IIR, and Chebyshev design are written natively so the output
+matches lingot's exact coefficients (e.g. optimal Hamming 0.53836/0.46164). `rustfft`
+only covers the FFT step.
 
 ## Guidelines
 

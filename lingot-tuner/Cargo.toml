@@ -20,8 +20,11 @@ uom = "0.38.0"
 eframe = { version = "0.34.3", optional = true }
 
 [features]
-# The GUI frontend (egui/eframe). Off by default so the CLI builds without
-# pulling in the graphics stack.
+# The GUI tuner ships by default, so `cargo install lingot-tuner` gives the
+# graphical binary. Build the CLI lean (no graphics stack) with
+# `--no-default-features`.
+default = ["gui"]
+# The GUI frontend (egui/eframe).
 gui = ["dep:eframe"]
 
 # The graphical tuner. Only builds when the `gui` feature is enabled.

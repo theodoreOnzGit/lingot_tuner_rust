@@ -4,11 +4,17 @@ description = "A musical instrument tuner — Rust rewrite of lingot"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/theodoreOnzGit/lingot_tuner_rust"
+readme = "../README.md"
+keywords = ["tuner", "music", "audio", "dsp", "guitar"]
+categories = ["multimedia::audio", "command-line-utilities"]
 
 # Binary crate: Layers 4-5 (core loop + GUI). Owns all application-level
 # threading and the egui frontend. Depends on the `lingot` library.
 [dependencies]
-lingot = { path = "../lingot" }
+# `version` is required so the crate is publishable; `path` still wins for
+# local workspace builds.
+lingot = { path = "../lingot", version = "0.1.0" }
 crossbeam-channel = "0.5"
 uom = "0.38.0"
 eframe = { version = "0.34.3", optional = true }

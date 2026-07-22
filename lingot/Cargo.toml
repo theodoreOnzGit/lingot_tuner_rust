@@ -4,6 +4,10 @@ description = "Signal-processing and audio-capture library for a Rust rewrite of
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository = "https://github.com/theodoreOnzGit/lingot_tuner_rust"
+readme = "../README.md"
+keywords = ["tuner", "music", "audio", "dsp", "fft"]
+categories = ["multimedia::audio", "science"]
 
 # Library crate: Layers 1-3 (config/scale, signal processing, audio capture).
 # Must stay free of GUI and application-level threading — see /CLAUDE.md.

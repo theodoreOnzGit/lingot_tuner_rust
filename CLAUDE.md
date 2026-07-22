@@ -103,15 +103,32 @@ Rules:
 | 3 — Audio capture (cpal) | ✅ done | `lingot/src/audio.rs` |
 | 4 — Core loop | ✅ done (verified on real guitar) | `lingot-tuner/src/core.rs` |
 | 5 — GUI (egui) | ✅ done (analog gauge, verified on guitar) | `lingot-tuner/src/gui.rs` |
+| 5b — TUI (ratatui) | ✅ done (verified rendering + live pitch on desktop) | `lingot-tuner/src/tui.rs` |
 
-**Two binaries** in the `lingot-tuner` package: `lingot-tuner` (GUI, behind the
-optional `gui` feature → `eframe`) and `lingot-tuner-cli` (CLI, always builds, no
-GUI deps). Shared code (`core`, `note`) lives in this package's own internal
-`lib.rs` — distinct from the reusable `lingot` library. eframe 0.34: the `App`
-trait's required method is now `ui(&mut self, ui, frame)` (not `update`).
-`gui` is a default feature but resolves to *no dependency* on Android, so the
-`lingot-tuner` binary still builds there — it just prints a pointer to the CLI
-(hard rule 1).
+**Three binaries** in the `lingot-tuner` package: `lingot-tuner` (GUI, behind the
+optional `gui` feature → `eframe`), `lingot-tuner-tui` (terminal gauge, behind the
+optional `tui` feature → `ratatui`), and `lingot-tuner-cli` (plain text, always
+builds, no frontend deps). Shared code (`core`, `gauge`, `note`) lives in this
+package's own internal `lib.rs` — distinct from the reusable `lingot` library.
+eframe 0.34: the `App` trait's required method is now `ui(&mut self, ui, frame)`
+(not `update`). `gui` is a default feature but resolves to *no dependency* on
+Android, so the `lingot-tuner` binary still builds there — it just prints a
+pointer to the CLI (hard rule 1).
+
+**Why the TUI exists.** winit's `build.rs` defines
+`free_unix = all(unix, not(apple), not(android_platform), ...)` and gates
+`x11_platform` on it, so on `target_os = "android"` the X11 backend is compiled
+out *unconditionally* — no feature flag brings it back. The egui GUI therefore
+cannot run under Termux-X11 at all, and a terminal frontend is the only one that
+works natively on Termux. `ratatui` is pure Rust + termios and builds fine for
+`aarch64-linux-android`.
+
+**Needle smoothing is shared** (`gauge.rs`, no frontend deps): `Needle` owns
+lingot's 2nd-order damped-spring IIR and steps it at a fixed 60 Hz via a time
+accumulator, so the GUI (60+ Hz) and the TUI (≈30 Hz) show identical motion.
+`advance()` reads the clock; `advance_by(target, dt)` takes explicit elapsed time
+so the motion is deterministically testable — a tight test loop over `advance()`
+advances no simulated time and the needle looks frozen.
 
 **GUI gauge** (`gui.rs`) is a hand-painted port of lingot's cairo gauge: cents arc
 with adaptive tics/labels, green/red in-tune band, needle hinged near the bottom.
@@ -253,6 +270,7 @@ const MID_C_FREQUENCY: f64 = 261.625565; // Hz
 | `cpal` | Cross-platform audio input (Linux + Windows) | added |
 | `thiserror` | Library error types (`AudioError`) | added |
 | `eframe` + `egui` | GUI | added — **`cfg(not(target_os = "android"))` only** |
+| `ratatui` | Terminal frontend (Termux/Android) | added — optional `tui` feature |
 | `crossbeam-channel` | Efficient channels between threads | Layer 4 |
 
 Deliberately **not** used: `apodize`/`dasp_window` (windowing), `biquad`, `sci-rs`

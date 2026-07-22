@@ -37,6 +37,19 @@ fn main() {
         Ok(running) => running,
         Err(e) => {
             eprintln!("failed to start audio: {e}");
+            // On Android the input stream is opened via AAudio, which refuses
+            // to open a recording stream unless the *app* holding the process
+            // has RECORD_AUDIO. Under Termux that is not granted by default and
+            // the underlying error says nothing about permissions.
+            if cfg!(target_os = "android") {
+                eprintln!(
+                    "\nhint: on Android/Termux, recording requires the microphone permission.\n\
+                     Grant it to Termux (Settings > Apps > Termux > Permissions > Microphone),\n\
+                     or via adb: pm grant com.termux android.permission.RECORD_AUDIO\n\
+                     Note that Termux must declare RECORD_AUDIO for the grant to be possible;\n\
+                     installing the Termux:API add-on (which shares Termux's UID) is the usual way."
+                );
+            }
             std::process::exit(1);
         }
     };

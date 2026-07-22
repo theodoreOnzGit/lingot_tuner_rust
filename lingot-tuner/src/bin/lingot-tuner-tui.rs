@@ -22,17 +22,12 @@
  * along with lingot_tuner_rust. If not, see <https://www.gnu.org/licenses/>.
  */
 
-//! Application-internal library for the `lingot-tuner` package.
-//!
-//! This is **not** the reusable `lingot` library (Layers 1-3) — it exists only
-//! to share the core loop and note-mapping helpers between this package's two
-//! binaries: `lingot-tuner` (GUI) and `lingot-tuner-cli` (CLI). It is allowed to
-//! contain application-level threading and `egui` code.
+//! Terminal tuner entry point (`lingot-tuner-tui`) — the frontend for
+//! Android/Termux, where the egui GUI cannot run.
 
-pub mod core;
-pub mod gauge;
-#[cfg(all(feature = "gui", not(target_os = "android")))]
-pub mod gui;
-pub mod note;
-#[cfg(feature = "tui")]
-pub mod tui;
+fn main() {
+    if let Err(e) = lingot_tuner::tui::run() {
+        eprintln!("lingot-tuner-tui: {e}");
+        std::process::exit(1);
+    }
+}

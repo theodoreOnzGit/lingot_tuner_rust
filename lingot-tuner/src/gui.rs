@@ -25,41 +25,18 @@
 //! egui frontend (Layer 5): an analog tuning gauge (in the style of lingot's
 //! cairo gauge) plus a live spectrum view.
 
-use std::time::Instant;
 
 use crossbeam_channel::Receiver;
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Vec2};
 use lingot::config::Config;
-use lingot::filter::Filter;
 use lingot::scale::Scale;
 
 use crate::core::{Core, TunerResult};
+use crate::gauge::{Needle, IN_TUNE_CENTS};
 use crate::note::nearest_note;
 
-/// Within this many cents the note is considered in tune (turns green).
-const IN_TUNE_CENTS: f64 = 5.0;
 /// Half-sweep of the needle, in degrees (matches lingot's `overtureAngle`).
 const OVERTURE_DEG: f32 = 65.0;
-
-// Needle-smoothing filter, modelling the needle as a damped spring driven each
-// tick toward the target cents. Values and 2nd-order IIR design match lingot's
-// gauge filter (lingot-gui-mainframe.c / lingot-io-ui-settings.c defaults).
-const GAUGE_RATE: f64 = 60.0; // Hz — fixed update rate the coefficients assume
-const GAUGE_ADAPTATION: f64 = 150.0; // quicker to target as this grows
-const GAUGE_DAMPING: f64 = 30.0; // less "bounce" as this grows (lingot default: 15)
-
-/// Build lingot's 2nd-order gauge-smoothing filter, primed to rest at `rest`.
-fn gauge_filter(rest: f64) -> Filter {
-    let (k, q, r) = (GAUGE_ADAPTATION, GAUGE_DAMPING, GAUGE_RATE);
-    let a = [k + r * (q + r), -r * (q + 2.0 * r), r * r];
-    let b = [k];
-    let mut filter = Filter::new(&a, &b);
-    // Settle the filter state so the needle starts at rest (no startup sweep).
-    for _ in 0..600 {
-        filter.filter_sample(rest);
-    }
-    filter
-}
 
 /// Launch the GUI tuner. Blocks until the window is closed.
 pub fn run() -> eframe::Result<()> {
@@ -96,21 +73,14 @@ struct TunerApp {
     scale: Scale,
     /// Full cents range spanned by the gauge (from config).
     gauge_range: f64,
-    /// Where the needle rests when no pitch is detected (from config; ≈ −45¢).
-    gauge_rest_value: f64,
 
     frequency: f64,
     note: String,
     cents: f64,
     spd: Vec<f64>,
 
-    // Needle smoothing.
-    gauge_filter: Filter,
     /// Smoothed needle position in cents (what the needle actually points at).
-    gauge_pos: f64,
-    /// Accumulated time for the fixed 60 Hz filter step.
-    gauge_accumulator: f64,
-    last_frame: Instant,
+    needle: Needle,
 }
 
 impl TunerApp {
@@ -126,38 +96,17 @@ impl TunerApp {
             results,
             scale,
             gauge_range,
-            gauge_rest_value,
             frequency: 0.0,
             note: "--".to_string(),
             cents: 0.0,
             spd: Vec::new(),
-            gauge_filter: gauge_filter(gauge_rest_value),
-            gauge_pos: gauge_rest_value,
-            gauge_accumulator: 0.0,
-            last_frame: Instant::now(),
+            needle: Needle::new(gauge_rest_value),
         }
     }
 
-    /// Advance the needle-smoothing filter at a fixed 60 Hz, independent of the
-    /// display refresh rate, toward the current target (the detected cents, or
-    /// the rest value when no pitch is present).
     fn update_gauge(&mut self) {
-        let target = if self.frequency > 0.0 {
-            self.cents
-        } else {
-            self.gauge_rest_value
-        };
-
-        let dt = self.last_frame.elapsed().as_secs_f64();
-        self.last_frame = Instant::now();
-        // Cap to avoid a long catch-up burst after a stall.
-        self.gauge_accumulator = (self.gauge_accumulator + dt).min(0.25);
-
-        let step = 1.0 / GAUGE_RATE;
-        while self.gauge_accumulator >= step {
-            self.gauge_pos = self.gauge_filter.filter_sample(target);
-            self.gauge_accumulator -= step;
-        }
+        self.needle
+            .advance((self.frequency > 0.0).then_some(self.cents));
     }
 
     /// Pull the most recent result from the channel (discarding any backlog).
@@ -201,7 +150,7 @@ impl eframe::App for TunerApp {
                 ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(16.0).weak());
             } else {
                 ui.label(
-                    egui::RichText::new(format!("------ cents"))
+                    egui::RichText::new("------ cents")
                         .size(22.0)
                         .color(colour),
                 );
@@ -286,7 +235,7 @@ impl TunerApp {
 
         // needle — uses the smoothed gauge position (which glides toward the
         // detected cents, or toward gauge_rest_value when no pitch is present).
-        let clamped = (self.gauge_pos as f32).clamp(-gauge_range / 2.0, gauge_range / 2.0);
+        let clamped = (self.needle.position() as f32).clamp(-gauge_range / 2.0, gauge_range / 2.0);
         let a = 2.0 * (clamped / gauge_range) * overture;
         let red = Color32::from_rgb(170, 51, 51);
         painter.line_segment([polar(-h * 0.08, a), polar(h * 0.85, a)],

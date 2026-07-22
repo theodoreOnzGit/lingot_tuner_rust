@@ -60,11 +60,36 @@ pub struct AudioInputConfig {
     pub sample_rate: u32,
 }
 
-/// Names of all available input devices on the default host.
-pub fn input_devices() -> Result<Vec<String>, AudioError> {
+/// Enumerate input devices, tolerating hosts that cannot enumerate at all.
+///
+/// cpal's Android backend enumerates through JNI, and its entry point is
+/// `ndk_context::android_context()`, which *panics* ("android context was not
+/// initialized") when no JavaVM has been registered. That is the normal state
+/// for a plain CLI process under Termux — there is no `android_activity` or
+/// `JNI_OnLoad` to register one. cpal guards the call with `if let Ok(..)`,
+/// which a panic walks straight past.
+///
+/// Enumeration is only ever a convenience here (opening the *default* device
+/// needs none of it), so an un-enumerable host means "no named devices", not a
+/// dead process.
+fn enumerate_input_devices() -> Result<Vec<cpal::Device>, AudioError> {
     let host = cpal::default_host();
+    let enumerated = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        host.input_devices().map(|iter| iter.collect::<Vec<_>>())
+    }));
+    match enumerated {
+        Ok(devices) => Ok(devices?),
+        Err(_) => Ok(Vec::new()),
+    }
+}
+
+/// Names of all available input devices on the default host.
+///
+/// Returns an empty list on hosts that cannot enumerate (see
+/// [`enumerate_input_devices`]); the default device may still be openable.
+pub fn input_devices() -> Result<Vec<String>, AudioError> {
     let mut names = Vec::new();
-    for device in host.input_devices()? {
+    for device in enumerate_input_devices()? {
         if let Ok(desc) = device.description() {
             names.push(desc.name().to_string());
         }
@@ -94,8 +119,8 @@ impl AudioInput {
         let host = cpal::default_host();
 
         let device = match &config.device {
-            Some(name) => host
-                .input_devices()?
+            Some(name) => enumerate_input_devices()?
+                .into_iter()
                 .find(|d| {
                     d.description()
                         .map(|desc| desc.name() == name.as_str())

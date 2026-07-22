@@ -14,9 +14,12 @@ categories = ["multimedia::audio", "command-line-utilities"]
 [dependencies]
 # `version` is required so the crate is publishable; `path` still wins for
 # local workspace builds.
-lingot = { path = "../lingot", version = "0.2.0" }
+lingot = { path = "../lingot", version = "0.2.1" }
 crossbeam-channel = "0.5"
 uom = "0.38.0"
+# Terminal frontend. Pure Rust + termios, so unlike eframe this *does* build for
+# aarch64-linux-android and is the only frontend usable under Termux.
+ratatui = { version = "0.30", optional = true }
 
 # eframe pulls in winit/android-activity, which does not build for
 # `aarch64-linux-android` (Termux). Everything except the GUI must stay
@@ -29,9 +32,11 @@ eframe = { version = "0.34.3", optional = true }
 # The GUI tuner ships by default, so `cargo install lingot-tuner` gives the
 # graphical binary. Build the CLI lean (no graphics stack) with
 # `--no-default-features`.
-default = ["gui"]
-# The GUI frontend (egui/eframe).
+default = ["gui", "tui"]
+# The GUI frontend (egui/eframe). Resolves to no dependency on Android.
 gui = ["dep:eframe"]
+# The terminal frontend (ratatui). Builds everywhere, including Termux.
+tui = ["dep:ratatui"]
 
 # The graphical tuner. Only builds when the `gui` feature is enabled.
 [[bin]]
@@ -39,7 +44,13 @@ name = "lingot-tuner"
 path = "src/main.rs"
 required-features = ["gui"]
 
-# The command-line tuner. Always builds; no GUI dependencies.
+# The command-line tuner. Always builds; no frontend dependencies.
 [[bin]]
 name = "lingot-tuner-cli"
 path = "src/bin/lingot-tuner-cli.rs"
+
+# The terminal tuner — the usable frontend on Android/Termux.
+[[bin]]
+name = "lingot-tuner-tui"
+path = "src/bin/lingot-tuner-tui.rs"
+required-features = ["tui"]

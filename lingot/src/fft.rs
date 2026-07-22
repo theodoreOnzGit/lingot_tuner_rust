@@ -46,8 +46,15 @@ impl FftPlan {
         }
     }
 
+    /// FFT size this plan was built for.
     pub fn len(&self) -> usize {
         self.buf.len()
+    }
+
+    /// Always false in practice — a plan is built for a fixed non-zero size.
+    /// Present because a public `len` without `is_empty` is a wart.
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
     }
 
     /// Full FFT → Spectral Power Distribution (normalised squared magnitude).

@@ -197,7 +197,7 @@ fn pick_config(
 
     for range in &ranges {
         if range.min_sample_rate() <= desired_rate && desired_rate <= range.max_sample_rate() {
-            return Ok(range.clone().with_sample_rate(desired_rate));
+            return Ok((*range).with_sample_rate(desired_rate));
         }
     }
 

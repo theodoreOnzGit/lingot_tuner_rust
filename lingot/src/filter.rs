@@ -172,11 +172,11 @@ impl Filter {
         new_b[0] = 1.0;
 
         // multiply in each conjugate pole pair as a 2nd-order section
-        for p in 0..n / 2 {
+        for p in pole.iter().take(n / 2) {
             let b1 = 2.0;
             let b2 = 1.0;
-            let a1 = -2.0 * pole[p].re;
-            let a2 = pole[p].re * pole[p].re + pole[p].im * pole[p].im;
+            let a1 = -2.0 * p.re;
+            let a2 = p.re * p.re + p.im * p.im;
 
             new_a[1] = a[1] + a1 * a[0];
             new_b[1] = b[1] + b1 * b[0];

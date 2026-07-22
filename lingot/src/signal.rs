@@ -194,10 +194,10 @@ pub fn estimate_fundamental_frequency(
                 }
             }
 
-            if p_index[m] == -1 {
-                p_index[m] = i as i32;
-                magnitude[m] = snri;
-            } else if snr[i] > snr[p_index[m] as usize] {
+            // take the slot if it is free, or if this peak beats the one already
+            // there. The `-1` test must stay first: short-circuiting is what
+            // stops the sentinel being used as an index.
+            if p_index[m] == -1 || snr[i] > snr[p_index[m] as usize] {
                 p_index[m] = i as i32;
                 magnitude[m] = snri;
             }

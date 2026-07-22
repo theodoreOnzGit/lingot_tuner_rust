@@ -26,3 +26,10 @@ dist/
 # Vendored upstream sources — cloned from their own git remotes, never committed
 # here. See "Hard rules" in CLAUDE.md for how to repopulate.
 vendor/
+
+# bd (beads) machine-local artifacts. bd forcibly makes .beads/issues.jsonl a
+# symlink into ~/.local/share/beads-rs/exports/ on every sync, so it can never be
+# meaningfully committed. The committed snapshot is .beads/issues.export.jsonl,
+# refreshed by .beads/refresh-export.sh. See .beads/README.md.
+.beads/issues.jsonl
+.beads/issues.jsonl.bak

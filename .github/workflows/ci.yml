@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch/PR supersedes the one in flight.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Hard rule 1 in CLAUDE.md: everything except the egui/eframe GUI must compile
+  # for Termux (aarch64-linux-android), *including every test target*. This job
+  # is the enforcement of that rule; until it existed the rule was only ever
+  # checked by a human remembering to run it locally, and a release shipped a
+  # false Termux claim because of exactly that gap.
+  #
+  # `check` rather than `build` because there is no Android linker here (same
+  # reason CLAUDE.md's local gate uses `check`).
+  #
+  # This job deliberately installs NO system packages, and that is load-bearing
+  # rather than an oversight:
+  #   * eframe is declared under [target.'cfg(not(target_os = "android"))'], so
+  #     on Android the `gui` feature resolves to no dependency at all — no
+  #     winit, no wgpu, no X11/Wayland/GL headers.
+  #   * cpal selects its ndk/AAudio backend on Android, so alsa-sys (the only
+  #     crate in this tree that links a system library) is never built.
+  # Verified against a from-scratch target dir: the Android build tree contains
+  # ndk/ndk-sys and no alsa-sys, eframe, winit or glutin.
+  # If this job ever starts needing apt packages, a dependency has broken the
+  # Termux rule — fix the dependency, do not add the package.
+  android-check:
+    name: android-check (aarch64-linux-android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain + Android target
+        # Equivalent to `rustup target add aarch64-linux-android`.
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+
+      - name: cargo check --target aarch64-linux-android
+        run: cargo check --target aarch64-linux-android --workspace --all-targets
+
+  # Native Linux build + unit tests (53 tests as of workspace v0.2.2:
+  # 38 in `lingot`, 15 in `lingot-tuner`).
+  #
+  # Unlike android-check, this build *does* include eframe and cpal's ALSA
+  # backend, so it needs system dev packages.
+  test:
+    name: test (x86_64-unknown-linux-gnu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        # Minimal on purpose. Determined empirically rather than copied from a
+        # template: a from-scratch `cargo test --workspace` was inspected for
+        # every `cargo:rustc-link-lib` directive emitted by a build script, and
+        # the complete set was `asound` and `dl`.
+        #
+        #   libasound2-dev — alsa-sys is the ONLY crate here that links a system
+        #                    library (cpal's ALSA backend -> -lasound). It finds
+        #                    it through pkg-config (alsa.pc), so the -dev package
+        #                    is required, not just the runtime lib.
+        #   pkg-config     — alsa-sys's build script shells out to it. Present on
+        #                    the ubuntu-latest image already; listed so the
+        #                    requirement is explicit rather than inherited.
+        #
+        # Deliberately NOT installed: libx11/libxcb/libxkbcommon/libwayland/GL
+        # dev packages. winit and wgpu reach those through x11-dl, xkbcommon-dl,
+        # wayland-sys (with its `dlopen` feature) and khronos-egl — all of which
+        # dlopen at *runtime* and emit no link directives, so they are not build
+        # requirements. `cargo test` never opens a window, so nothing here loads
+        # them either. (Actually *running* the GUI on a runner would need them,
+        # plus a display server; that is not what this job does.)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: native
+
+      - name: cargo test
+        run: cargo test --workspace
+
+# Not present, on purpose:
+#   * clippy — `cargo clippy --workspace --all-targets` currently reports 4
+#     pre-existing warnings in the `lingot` library. Adding a gating job would
+#     mean either red CI from day one or editing source that is out of scope for
+#     wiring up CI.
+#   * rustfmt — `cargo fmt --check` currently reports diffs across most files in
+#     the workspace; the tree has never been rustfmt'd.
+# Both become worth adding once the tree is cleaned up in a separate change.

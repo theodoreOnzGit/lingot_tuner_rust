@@ -138,6 +138,32 @@ still builds on Android; it just tells you to use another binary.)
 Without this, capture fails with an AAudio error that says nothing about
 permissions — so the binaries print this advice when startup fails on Android.
 
+### iOS — not supported, and not cheap to add
+
+There is no iOS build, and the cost of adding one is a licensing and hardware
+problem rather than a code problem. Recorded here so nobody assumes otherwise:
+
+- **A Mac is required.** Xcode is macOS-only, the iOS SDK ships *inside* Xcode,
+  and `codesign` is a macOS binary. Apple's SDK licence further restricts use to
+  Apple-branded hardware, so cross-compiling from Linux is on shaky ground even
+  where it technically works. You do not have to *own* one — GitHub Actions
+  provides macOS runners, free for public repositories — but something running
+  macOS has to build and sign every release.
+- **An Apple Developer Program membership is required** (~$99/year) to install on
+  a physical device beyond short-lived development builds, to use TestFlight, or
+  to ship to the App Store. There is no sideloading equivalent to handing someone
+  an APK.
+- **A terminal frontend is not a way around this.** iOS has no system shell, and
+  App Store guideline 2.5.2 forbids apps that download, install, or execute code;
+  the OS enforces it, so only code signed into an app bundle runs. Terminal apps
+  like a-Shell (commands linked *into* the app) and iSH (a usermode x86 emulator)
+  work around that rather than through it — and neither can give a process the
+  microphone entitlement, so the Termux approach has nowhere to land.
+
+The DSP itself would port without drama: the `lingot` crate is pure and
+frontend-free, and `cpal` supports iOS via CoreAudio. It is the build and
+distribution pipeline, not the code, that costs.
+
 ### CLI tuner
 
 Run the command-line tuner in release mode (recommended for smooth, low-latency

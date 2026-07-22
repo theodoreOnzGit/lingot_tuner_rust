@@ -30,6 +30,6 @@
 //! contain application-level threading and `egui` code.
 
 pub mod core;
-#[cfg(feature = "gui")]
+#[cfg(all(feature = "gui", not(target_os = "android")))]
 pub mod gui;
 pub mod note;

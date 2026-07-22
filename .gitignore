@@ -22,3 +22,7 @@ target
 
 # AppImage build output
 dist/
+
+# Vendored upstream sources — cloned from their own git remotes, never committed
+# here. See "Hard rules" in CLAUDE.md for how to repopulate.
+vendor/

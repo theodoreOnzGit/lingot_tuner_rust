@@ -24,6 +24,16 @@
 
 //! GUI tuner entry point (`lingot-tuner`).
 
+#[cfg(not(target_os = "android"))]
 fn main() -> eframe::Result<()> {
     lingot_tuner::gui::run()
+}
+
+// Android/Termux has no windowing stack, so `eframe` is not a dependency there.
+// The binary still builds — the Termux rule is compile-everything-but-the-GUI —
+// it just points at the CLI instead of rendering a gauge.
+#[cfg(target_os = "android")]
+fn main() {
+    eprintln!("the graphical tuner is not available on Android/Termux; use `lingot-tuner-cli`");
+    std::process::exit(1);
 }

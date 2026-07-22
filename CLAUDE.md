@@ -1,7 +1,98 @@
 # lingot_tuner_rust
 
 A Rust rewrite of [lingot](https://github.com/ibancg/lingot), a musical instrument tuner.
-The original C source lives at `../lingot/src/` and is the reference implementation.
+The original C source lives at `vendor/lingot/src/` and is the reference implementation.
+
+## Hard rules
+
+These are standing constraints. They are not suggestions and they do not lapse
+between sessions.
+
+### 1. Everything except the GUI must build and test on Termux
+
+Target: `aarch64-linux-android` (what Termux uses). The whole workspace — library,
+CLI binary, **and every test target** — must compile there, and `cargo test` must
+pass. **Only the egui/eframe GUI is exempt**; nothing else may be excluded, and
+"it's just a test helper" is not an exemption.
+
+Consequences that bind every change:
+
+- **No dependency may break the Android target.** Before adding a crate, check it
+  builds for `aarch64-linux-android`. Anything that drags in windowing, GL, X11,
+  ALSA/PulseAudio dev headers, or an NDK-requiring C/C++ build will not.
+- **GUI-only dependencies are declared per-target**, never as a plain dependency:
+
+  ```toml
+  [target.'cfg(not(target_os = "android"))'.dependencies]
+  eframe = { version = "0.34.3", optional = true }
+  ```
+
+  and every item that uses them is gated with
+  `#[cfg(all(feature = "gui", not(target_os = "android")))]`. This is why `gui`
+  can stay a *default* feature without breaking Termux: on Android the feature
+  resolves to no dependency at all.
+- **Tests must not require a GUI, an audio device, or a display.** A test that
+  touches hardware must tolerate its absence (see
+  `audio::tests::listing_input_devices_does_not_panic`) rather than being skipped.
+- `cpal` **is not exempt** — it builds for Android via the AAudio/`ndk` backend
+  and must keep doing so.
+
+**Gate to run before any commit** (a local proxy for Termux; `check` rather than
+`build` because there is no Android linker on the dev box):
+
+```sh
+rustup target add aarch64-linux-android      # once
+cargo check --target aarch64-linux-android --workspace --all-targets
+cargo test --workspace                       # native, must stay green too
+```
+
+If that `check` fails, the change is not done.
+
+### 2. Third-party source lives in `vendor/`, cloned, never committed
+
+Any external source you need to read — first and foremost the original C lingot —
+lives under `vendor/`, obtained by cloning it from its own git remote. `vendor/` is
+in `.gitignore` and stays that way.
+
+```sh
+git clone --depth 1 https://github.com/ibancg/lingot.git vendor/lingot
+```
+
+Rules:
+
+- **Never reference upstream source by a path outside this repo** (no `../lingot/`,
+  no absolute home paths). Those break for everyone but the machine that made them.
+  The reference implementation is `vendor/lingot/src/`.
+- **Never commit vendored source.** It has its own upstream and its own history; a
+  copy here would silently fork. If `vendor/` is missing, re-clone it — that is the
+  recovery procedure, and it is why the clone command belongs in this file.
+- **Never edit anything under `vendor/`.** It is read-only reference material. A
+  change that seems to belong upstream is a patch sent upstream, or a bead here.
+- Vendored trees are **not** part of the build. Nothing in `Cargo.toml` may point
+  into `vendor/`, and hard rule 1 (Termux) does not apply to what is in there.
+
+### 3. Track work in beads (`bd`)
+
+This repo uses the Rust [beads](https://github.com/steveyegge/beads) issue tracker;
+the store lives in `.beads/`. Use it as external memory — it is infrastructure for
+the agent, not project management ceremony.
+
+```sh
+bd ready              # what can be worked on now
+bd create "..."       # promise to handle something later
+bd claim <id>         # taking it
+bd close <id>         # done
+bd prime              # full workflow context
+```
+
+Rules:
+
+- When you notice out-of-scope work mid-task — tech debt, a bug, follow-on work —
+  **file a bead instead of either derailing or forgetting.** Capture enough context
+  that it can be picked up cold.
+- Any multi-step task gets a bead before work starts, and the bead is closed (with
+  what actually happened) when it lands.
+- Never silently drop a known problem. If it is not fixed, it is a bead.
 
 ## Status
 
@@ -18,6 +109,9 @@ optional `gui` feature → `eframe`) and `lingot-tuner-cli` (CLI, always builds,
 GUI deps). Shared code (`core`, `note`) lives in this package's own internal
 `lib.rs` — distinct from the reusable `lingot` library. eframe 0.34: the `App`
 trait's required method is now `ui(&mut self, ui, frame)` (not `update`).
+`gui` is a default feature but resolves to *no dependency* on Android, so the
+`lingot-tuner` binary still builds there — it just prints a pointer to the CLI
+(hard rule 1).
 
 **GUI gauge** (`gui.rs`) is a hand-painted port of lingot's cairo gauge: cents arc
 with adaptive tics/labels, green/red in-tune band, needle hinged near the bottom.
@@ -130,6 +224,8 @@ Understanding this is essential before touching any signal processing code.
 
 ## Reference files (original C)
 
+All paths are relative to `vendor/lingot/src/` (see hard rule 2).
+
 | Concern | C file |
 |---|---|
 | Config | `lingot-config.{c,h}`, `lingot-config-scale.{c,h}` |
@@ -156,7 +252,7 @@ const MID_C_FREQUENCY: f64 = 261.625565; // Hz
 | `num-complex` | Complex math for Chebyshev pole/bilinear design | added |
 | `cpal` | Cross-platform audio input (Linux + Windows) | added |
 | `thiserror` | Library error types (`AudioError`) | added |
-| `eframe` + `egui` | GUI | Layer 5 |
+| `eframe` + `egui` | GUI | added — **`cfg(not(target_os = "android"))` only** |
 | `crossbeam-channel` | Efficient channels between threads | Layer 4 |
 
 Deliberately **not** used: `apodize`/`dasp_window` (windowing), `biquad`, `sci-rs`

@@ -17,6 +17,12 @@ categories = ["multimedia::audio", "command-line-utilities"]
 lingot = { path = "../lingot", version = "0.1.0" }
 crossbeam-channel = "0.5"
 uom = "0.38.0"
+
+# eframe pulls in winit/android-activity, which does not build for
+# `aarch64-linux-android` (Termux). Everything except the GUI must stay
+# Termux-compilable — see the hard rule in /CLAUDE.md — so the graphics stack is
+# declared per-target and `feature = "gui"` resolves to nothing on Android.
+[target.'cfg(not(target_os = "android"))'.dependencies]
 eframe = { version = "0.34.3", optional = true }
 
 [features]

@@ -20,6 +20,14 @@ uom = "0.38.0"
 # Terminal frontend. Pure Rust + termios, so unlike eframe this *does* build for
 # aarch64-linux-android and is the only frontend usable under Termux.
 ratatui = { version = "0.30", optional = true }
+# WebSocket framing for the browser frontend. Pure Rust, and TLS is left off
+# (`default-features = false` plus `handshake`), so nothing here links a system
+# library or needs a C toolchain — it cross-compiles to aarch64-linux-android
+# like everything else. The HTTP side is hand-rolled over std::net; one page and
+# one socket route do not justify a framework or an async runtime.
+tungstenite = { version = "0.30", default-features = false, features = [
+  "handshake",
+], optional = true }
 
 # eframe pulls in winit/android-activity, which does not build for
 # `aarch64-linux-android` (Termux). Everything except the GUI must stay
@@ -32,11 +40,14 @@ eframe = { version = "0.34.3", optional = true }
 # The GUI tuner ships by default, so `cargo install lingot-tuner` gives the
 # graphical binary. Build the CLI lean (no graphics stack) with
 # `--no-default-features`.
-default = ["gui", "tui"]
+default = ["gui", "tui", "web"]
 # The GUI frontend (egui/eframe). Resolves to no dependency on Android.
 gui = ["dep:eframe"]
 # The terminal frontend (ratatui). Builds everywhere, including Termux.
 tui = ["dep:ratatui"]
+# The browser frontend (embedded HTTP + WebSocket server). Builds everywhere,
+# including Termux, where it is the only frontend with real graphics.
+web = ["dep:tungstenite"]
 
 # The graphical tuner. Only builds when the `gui` feature is enabled.
 [[bin]]
@@ -54,3 +65,9 @@ path = "src/bin/lingot-tuner-cli.rs"
 name = "lingot-tuner-tui"
 path = "src/bin/lingot-tuner-tui.rs"
 required-features = ["tui"]
+
+# The browser tuner — serves the gauge to any browser, including the phone's own.
+[[bin]]
+name = "lingot-tuner-web"
+path = "src/bin/lingot-tuner-web.rs"
+required-features = ["web"]

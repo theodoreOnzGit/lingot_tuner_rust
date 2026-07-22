@@ -104,10 +104,12 @@ Rules:
 | 4 — Core loop | ✅ done (verified on real guitar) | `lingot-tuner/src/core.rs` |
 | 5 — GUI (egui) | ✅ done (analog gauge, verified on guitar) | `lingot-tuner/src/gui.rs` |
 | 5b — TUI (ratatui) | ✅ done (verified on desktop **and on a Pixel 10a under Termux**) | `lingot-tuner/src/tui.rs` |
+| 5c — Web (browser) | ✅ done (verified on desktop; **not yet on-device**) | `lingot-tuner/src/web.rs`, `src/web/index.html` |
 
-**Three binaries** in the `lingot-tuner` package: `lingot-tuner` (GUI, behind the
+**Four binaries** in the `lingot-tuner` package: `lingot-tuner` (GUI, behind the
 optional `gui` feature → `eframe`), `lingot-tuner-tui` (terminal gauge, behind the
-optional `tui` feature → `ratatui`), and `lingot-tuner-cli` (plain text, always
+optional `tui` feature → `ratatui`), `lingot-tuner-web` (browser gauge, behind the
+optional `web` feature → `tungstenite`), and `lingot-tuner-cli` (plain text, always
 builds, no frontend deps). Shared code (`core`, `gauge`, `note`) lives in this
 package's own internal `lib.rs` — distinct from the reusable `lingot` library.
 eframe 0.34: the `App` trait's required method is now `ui(&mut self, ui, frame)`
@@ -127,16 +129,42 @@ works natively on Termux. `ratatui` is pure Rust + termios and builds fine for
 is the intended terminal presentation and is verified on-device. A higher-fidelity
 arc gauge drawn with ratatui's `Canvas` (braille 2×4 sub-cells) was prototyped and
 **deliberately abandoned** — it worked, but terminal cells are the wrong medium to
-keep pushing. If a richer UI is ever wanted, the chosen route is a **Tauri**
-frontend, not finer terminal pixels and not Termux:GUI. Options ruled out, with
-reasons, so they are not re-explored: Termux:X11 (winit compiles X11 out on
-Android), Termux:GUI (requires an add-on app, shared-signature install risk, no
-Canvas), proot + X11 (abandons the native-build rule, ~1GB, second audio stack),
-and a standalone APK (needs the full Android SDK/NDK toolchain).
+keep pushing. **The richer Android UI is `lingot-tuner-web`** (Layer 5c): the
+phone's own browser renders the gauge, so it needs no windowing stack, no NDK and
+no add-on app, and it is the only frontend that can show the spectrum. This
+supersedes the previously recorded Tauri plan — Tauri is no longer the route, and
+should not be revisited unless the web frontend proves inadequate on-device.
+
+Options ruled out, with reasons, so they are not re-explored: Termux:X11 (winit
+compiles X11 out on Android), Termux:GUI (requires an add-on app, shared-signature
+install risk, no Canvas), proot + X11 (abandons the native-build rule, ~1GB,
+second audio stack), a standalone APK (needs the full Android SDK/NDK toolchain),
+and **OPC-UA as the transport** for the web frontend (the `opcua` crate has
+non-optional `openssl`/`openssl-sys`, a native C build that breaks hard rule 1;
+and no browser can speak OPC-UA, so it would still need a gateway down to a plain
+WebSocket — which is what the frontend uses directly instead).
+
+**Web frontend** (`web.rs` + `web/index.html`): an embedded HTTP + WebSocket
+server; the page is a single `include_str!`-embedded HTML file (inline CSS/JS, no
+build step, no CDN — it must work on a Termux box with no network). The only new
+dependency is `tungstenite` (pure Rust, TLS features off); the HTTP side is
+hand-rolled over `std::net` because one page and one socket route need neither a
+framework nor an async runtime. Routing uses `TcpStream::peek` — `tungstenite::accept`
+performs the handshake itself and so needs the request *unread*, which is why the
+request line is peeked rather than consumed. `Core` is `!Send` (cpal stream), so it
+stays on the main thread and the accept loop gets its own; the only shared state is
+a mutex over the client registry, held solely for a non-blocking `try_send` fan-out
+and never across I/O. Snapshots go out at 60 Hz (~250 B, ~15 KiB/s); the 256-bin
+spectrum rides along only on ticks where a new result arrived (`calculation_rate`,
+15 Hz). Binds loopback by default — the stream is microphone-derived, so exposing
+it to the LAN must be explicit (`lingot-tuner-web 0.0.0.0:8080`).
 
 **Needle smoothing is shared** (`gauge.rs`, no frontend deps): `Needle` owns
 lingot's 2nd-order damped-spring IIR and steps it at a fixed 60 Hz via a time
-accumulator, so the GUI (60+ Hz) and the TUI (≈30 Hz) show identical motion.
+accumulator, so the GUI (60+ Hz), the TUI (≈30 Hz) and the web frontend show
+identical motion. The web frontend smooths **server-side** and ships the already-
+smoothed position, so the browser is a pure renderer with no filter of its own —
+one implementation of the motion, not two.
 `advance()` reads the clock; `advance_by(target, dt)` takes explicit elapsed time
 so the motion is deterministically testable — a tight test loop over `advance()`
 advances no simulated time and the needle looks frozen.
@@ -282,6 +310,7 @@ const MID_C_FREQUENCY: f64 = 261.625565; // Hz
 | `thiserror` | Library error types (`AudioError`) | added |
 | `eframe` + `egui` | GUI | added — **`cfg(not(target_os = "android"))` only** |
 | `ratatui` | Terminal frontend (Termux/Android) | added — optional `tui` feature |
+| `tungstenite` | WebSocket framing for the browser frontend | added — optional `web` feature, TLS off |
 | `crossbeam-channel` | Efficient channels between threads | Layer 4 |
 
 Deliberately **not** used: `apodize`/`dasp_window` (windowing), `biquad`, `sci-rs`

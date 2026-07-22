@@ -50,10 +50,11 @@ A state machine filters out transient glitches. It requires several consistent r
 
 ### 3. Frontends
 
-In this rewrite the computation thread sends each result (frequency + noise-subtracted SPD) to the frontend over a channel; the frontend renders at its own rate. Three frontends share the same core:
+In this rewrite the computation thread sends each result (frequency + noise-subtracted SPD) to the frontend over a channel; the frontend renders at its own rate. Four frontends share the same core:
 
 - **`lingot-tuner-cli`** — prints the detected note, cents, and frequency to the terminal.
-- **`lingot-tuner-tui`** — a [ratatui](https://ratatui.rs) terminal gauge: note, cents, frequency, and a needle on a cents scale. This is the frontend for Android/Termux, where the GUI cannot run (see [Android / Termux](#android--termux)). It uses the same needle smoothing as the GUI, so the motion is identical.
+- **`lingot-tuner-tui`** — a [ratatui](https://ratatui.rs) terminal gauge: note, cents, frequency, and a needle on a cents scale. It runs anywhere, including Android/Termux, where the GUI cannot (see [Android / Termux](#android--termux)). It uses the same needle smoothing as the GUI, so the motion is identical.
+- **`lingot-tuner-web`** — serves a small page over HTTP and streams readings to it over a WebSocket, so any browser becomes the display: the same analog gauge as the GUI, drawn on a canvas, plus the spectrum. This is the frontend with real graphics on Android — the phone's own browser does the rendering, so no windowing stack, NDK or add-on app is involved.
 - **`lingot-tuner`** — an [egui](https://github.com/emilk/egui) GUI rendering:
   - the **note name**, the **cents off-tune**, and the **frequency**;
   - an **analog tuning gauge** in the style of lingot's cairo gauge — a cents arc with minor/major tics and labels, a green/red in-tune band, and a needle hinged near the bottom. The needle is smoothed by a 2nd-order "damped spring" IIR filter (ported from lingot) driven at a fixed 60 Hz, and rests near the left (`gauge_rest_value`) when no pitch is present;
@@ -74,13 +75,14 @@ cargo build --release
 
 ## Running
 
-The `lingot-tuner` package builds three binaries:
+The `lingot-tuner` package builds four binaries:
 
 - **`lingot-tuner`** — the graphical (egui) tuner, behind the optional `gui` feature.
 - **`lingot-tuner-tui`** — a terminal gauge, behind the optional `tui` feature.
+- **`lingot-tuner-web`** — a browser tuner, behind the optional `web` feature.
 - **`lingot-tuner-cli`** — a command-line tuner (always builds, no frontend dependencies).
 
-`gui` and `tui` are both enabled by default, so `cargo install lingot-tuner` gives you all three.
+`gui`, `tui` and `web` are all enabled by default, so `cargo install lingot-tuner` gives you all four.
 
 ### GUI tuner
 
@@ -111,6 +113,28 @@ cargo run --release --bin lingot-tuner-tui
 
 Quit with `q`, `Esc`, or `Ctrl-C`.
 
+### Browser tuner
+
+Serves the gauge to any browser — including the one on the phone that is running
+it. The page is embedded in the binary, so there is nothing to install or fetch:
+
+```
+cargo run --release --bin lingot-tuner-web
+```
+
+Then open <http://127.0.0.1:8080/>. You get the same analog gauge as the GUI, a
+live spectrum, and the note/cents/frequency readout.
+
+It binds loopback by default. Pass an address to reach it from another machine —
+handy for putting the phone next to the amp and tuning from a laptop:
+
+```
+lingot-tuner-web 0.0.0.0:8080
+```
+
+Note that this makes the readings visible to anyone who can reach the port; it is
+opt-in for that reason.
+
 ### Android / Termux
 
 Everything except the egui GUI builds and runs natively on Termux:
@@ -118,14 +142,16 @@ Everything except the egui GUI builds and runs natively on Termux:
 ```
 pkg install rust
 cargo install lingot-tuner
-lingot-tuner-tui
+lingot-tuner-web        # then open http://127.0.0.1:8080/ in the phone's browser
+lingot-tuner-tui        # or stay in the terminal
 ```
 
 **The graphical tuner cannot work under Termux, and no configuration changes
 that.** winit gates its X11 backend on `free_unix`, which explicitly excludes
 `target_os = "android"`, so the backend is compiled out — running the Termux:X11
-app will not help. The terminal tuner is the frontend to use. (`lingot-tuner`
-still builds on Android; it just tells you to use another binary.)
+app will not help. Use the browser or terminal tuner instead; the browser one is
+the way to get a real gauge and a spectrum on a phone. (`lingot-tuner` still
+builds on Android; it just tells you to use another binary.)
 
 **Grant the microphone permission**, or audio will fail to start:
 

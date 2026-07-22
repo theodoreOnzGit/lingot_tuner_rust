@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<!--
+ lingot_tuner_rust - a musical instrument tuner.
+ Rust rewrite of lingot (https://github.com/ibancg/lingot).
+
+ Copyright (C) 2004-2020  Iban Cereijo.
+ Copyright (C) 2004-2008  Jairo Chapela.
+ Copyright (C) 2026       lingot_tuner_rust contributors.
+
+ Licensed under the GNU General Public License v3 or later; see the source
+ tree for the full notice.
+
+ The whole frontend is this one file — no build step, no bundler, no CDN. It is
+ embedded into the binary with include_str!, so `cargo install lingot-tuner`
+ ships a working UI with nothing else to fetch (which is the point on Termux,
+ where there is no npm toolchain worth setting up).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>lingot-tuner</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='14'>&#127925;</text></svg>">
+<style>
+  :root {
+    --bg: #101216;
+    --panel: #181b21;
+    --ink: #e7e9ee;
+    --dim: #7d8496;
+    --green: #50dc78;
+    --amber: #e6be46;
+    --red: #dc5a50;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    /* Keep the gauge clear of a phone's rounded corners / notch. */
+    padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  }
+  main { width: 100%; max-width: 620px; }
+  .readout { text-align: center; margin-bottom: 6px; }
+  #note {
+    font-size: clamp(56px, 20vw, 96px);
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    transition: color .12s linear;
+  }
+  #cents {
+    font-size: clamp(20px, 6vw, 28px);
+    font-variant-numeric: tabular-nums;
+    transition: color .12s linear;
+  }
+  #hz { font-size: 15px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  canvas { display: block; width: 100%; border-radius: 8px; }
+  #gauge { background: #fff; }
+  #spectrum { background: #121212; margin-top: 10px; height: 110px; }
+  footer {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--dim);
+  }
+  #status.bad { color: var(--red); }
+</style>
+</head>
+<body>
+<main>
+  <div class="readout">
+    <div id="note">--</div>
+    <div id="cents">------ cents</div>
+    <div id="hz">-- Hz</div>
+  </div>
+  <canvas id="gauge"></canvas>
+  <canvas id="spectrum"></canvas>
+  <footer>
+    <span id="status">connecting…</span>
+    <span>lingot-tuner</span>
+  </footer>
+</main>
+
+<script>
+"use strict";
+
+// Half-sweep of the needle. Matches OVERTURE_DEG in gui.rs, which in turn
+// matches lingot's `overtureAngle` — the three gauges are meant to look alike.
+const OVERTURE = 65 * Math.PI / 180;
+const IN_TUNE_CENTS = 5;
+// Fixed dB window the SNR spectrum is mapped into, as in gui.rs.
+const SPECTRUM_DB = 40;
+
+const state = {
+  hz: 0, note: "--", cents: 0, needle: 0,
+  locked: false, ok: true, range: 100, spd: [],
+  connected: false,
+};
+
+const els = {
+  note: document.getElementById("note"),
+  cents: document.getElementById("cents"),
+  hz: document.getElementById("hz"),
+  status: document.getElementById("status"),
+  gauge: document.getElementById("gauge"),
+  spectrum: document.getElementById("spectrum"),
+};
+
+// ---- transport ------------------------------------------------------------
+
+// The server pushes a snapshot ~60 times a second and never expects a reply,
+// so this socket is receive-only. Reconnect on drop: the common case is the
+// phone sleeping, and having to reload by hand would be miserable.
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { state.connected = true; };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    Object.assign(state, msg);
+    // `spd` only rides along on ticks where a new analysis landed (~15 Hz);
+    // Object.assign leaves the previous spectrum in place on the other ticks.
+  };
+  ws.onclose = () => {
+    state.connected = false;
+    state.locked = false;
+    setTimeout(connect, 1000);
+  };
+  ws.onerror = () => ws.close();
+}
+
+// ---- gauge ----------------------------------------------------------------
+
+/** lingot's adaptive tic spacing; mirrors `divisions()` in gui.rs. */
+function divisions(range) {
+  let minor = range / 20;
+  const base = Math.pow(10, Math.floor(Math.log10(minor)));
+  const norm = minor / base;
+  const step = norm >= 6 ? 10 : norm >= 2.5 ? 5 : norm >= 1.2 ? 2 : 1;
+  minor = step * base;
+  return [minor, 5 * minor];
+}
+
+function tuneColour(cents, locked) {
+  if (!locked) return "#7d8496";
+  const a = Math.abs(cents);
+  if (a < IN_TUNE_CENTS) return "#50dc78";
+  if (a < 20) return "#e6be46";
+  return "#dc5a50";
+}
+
+/**
+ * Size a canvas to its CSS box at device pixel density and return a context
+ * already scaled to CSS pixels, so all the drawing below can use plain units.
+ */
+function fitCanvas(canvas, cssHeight) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = cssHeight;
+  canvas.style.height = h + "px";
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  return [ctx, w, h];
+}
+
+/**
+ * The analog gauge, ported from `draw_gauge` in gui.rs (itself a port of
+ * lingot's cairo gauge): a cents arc with adaptive tics and labels, a
+ * green-in-red in-tune band, and a needle hinged just below the dial.
+ *
+ * Angles are measured from straight up, increasing clockwise. Canvas measures
+ * from +x, hence the -pi/2 on every arc.
+ */
+function drawGauge() {
+  const [ctx, w, h] = fitCanvas(els.gauge, Math.min(els.gauge.clientWidth / 1.6, 260));
+  if (w === 0) return;
+
+  const cx = w / 2, cy = h * 0.94;
+  const polar = (r, a) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  const stroke = (r, a0, a1, width, colour) => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, a0 - Math.PI / 2, a1 - Math.PI / 2);
+    ctx.lineWidth = width;
+    ctx.strokeStyle = colour;
+    ctx.stroke();
+  };
+  const line = (r0, r1, a, width, colour) => {
+    const [x0, y0] = polar(r0, a), [x1, y1] = polar(r1, a);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.lineWidth = width;
+    ctx.strokeStyle = colour;
+    ctx.stroke();
+  };
+
+  const ink = "#141414";
+  const range = state.range || 100;
+  const centsBarR = h * 0.75;
+
+  stroke(h * 0.48, -OVERTURE, OVERTURE, h * 0.07, "#ddaaaa");
+  stroke(h * 0.48, -0.12 * OVERTURE, 0.12 * OVERTURE, h * 0.07, "#99dd99");
+  stroke(centsBarR, -1.05 * OVERTURE, 1.05 * OVERTURE, h * 0.022, "#333355");
+
+  const [minorStep, majorStep] = divisions(range);
+
+  const minorR = centsBarR - h * 0.03;
+  const nMinor = Math.floor(0.5 * range / minorStep);
+  for (let i = -nMinor; i <= nMinor; i++) {
+    line(minorR, centsBarR, 2 * OVERTURE * i * minorStep / range, h * 0.008, ink);
+  }
+
+  const majorR = centsBarR - h * 0.045;
+  const nMajor = Math.floor(0.5 * range / majorStep);
+  ctx.font = `${h * 0.085}px system-ui, sans-serif`;
+  ctx.fillStyle = ink;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let i = -nMajor; i <= nMajor; i++) {
+    const a = 2 * OVERTURE * i * majorStep / range;
+    line(majorR, centsBarR, a, h * 0.022, ink);
+    const cents = Math.round(i * majorStep);
+    const [lx, ly] = polar(majorR * 0.93, a);
+    ctx.fillText(cents > 0 ? `+${cents}` : `${cents}`, lx, ly);
+  }
+  // Sits low enough not to collide with the "0" label directly above it.
+  ctx.fillText("cent", cx, cy - majorR * 0.805);
+
+  const half = range / 2;
+  const clamped = Math.max(-half, Math.min(half, state.needle));
+  const a = 2 * (clamped / range) * OVERTURE;
+  line(-h * 0.08, h * 0.85, a, h * 0.013, "#aa3333");
+  ctx.beginPath();
+  ctx.arc(cx, cy, h * 0.045, 0, 2 * Math.PI);
+  ctx.fillStyle = "#aa3333";
+  ctx.fill();
+}
+
+/** The SNR spectrum, as a bar per FFT bin — the view the terminal cannot do. */
+function drawSpectrum() {
+  const [ctx, w, h] = fitCanvas(els.spectrum, 110);
+  const spd = state.spd;
+  if (!spd || spd.length === 0 || w === 0) return;
+
+  const barW = w / spd.length;
+  ctx.fillStyle = "#50a0dc";
+  for (let i = 0; i < spd.length; i++) {
+    const norm = Math.max(0, Math.min(1, spd[i] / SPECTRUM_DB));
+    const barH = norm * h;
+    ctx.fillRect(i * barW, h - barH, Math.max(barW, 1), barH);
+  }
+}
+
+// ---- render loop ----------------------------------------------------------
+
+function render() {
+  const colour = tuneColour(state.cents, state.locked);
+
+  els.note.textContent = state.locked ? state.note : "--";
+  els.note.style.color = colour;
+  els.cents.style.color = colour;
+  els.cents.textContent = state.locked
+    ? `${state.cents >= 0 ? "+" : ""}${state.cents.toFixed(1)} cents`
+    : "------ cents";
+  els.hz.textContent = state.locked ? `${state.hz.toFixed(2)} Hz` : "-- Hz";
+
+  let status;
+  if (!state.connected) status = "disconnected — retrying…";
+  else if (!state.ok) status = "audio stream failed";
+  else if (!state.locked) status = "listening…";
+  else if (Math.abs(state.cents) < IN_TUNE_CENTS) status = "in tune ✓";
+  else if (state.cents < 0) status = "flat — tune up";
+  else status = "sharp — tune down";
+  els.status.textContent = status;
+  els.status.classList.toggle("bad", !state.connected || !state.ok);
+
+  drawGauge();
+  drawSpectrum();
+  requestAnimationFrame(render);
+}
+
+connect();
+requestAnimationFrame(render);
+</script>
+</body>
+</html>

@@ -34,6 +34,12 @@ fn main() -> eframe::Result<()> {
 // it just points at the CLI instead of rendering a gauge.
 #[cfg(target_os = "android")]
 fn main() {
-    eprintln!("the graphical tuner is not available on Android/Termux; use `lingot-tuner-cli`");
+    eprintln!(
+        "the graphical tuner is not available on Android/Termux.\n\
+         \n\
+         \x20 lingot-tuner-web   serves the gauge to this phone's browser (real graphics)\n\
+         \x20 lingot-tuner-tui   a gauge in the terminal\n\
+         \x20 lingot-tuner-cli   plain text"
+    );
     std::process::exit(1);
 }

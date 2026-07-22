@@ -127,7 +127,9 @@ impl AudioInput {
                         .unwrap_or(false)
                 })
                 .ok_or_else(|| AudioError::DeviceNotFound(name.clone()))?,
-            None => host.default_input_device().ok_or(AudioError::NoDefaultDevice)?,
+            None => host
+                .default_input_device()
+                .ok_or(AudioError::NoDefaultDevice)?,
         };
 
         let supported = pick_config(&device, config.sample_rate)?;
@@ -139,14 +141,30 @@ impl AudioInput {
         let healthy = Arc::new(AtomicBool::new(true));
 
         let stream = match sample_format {
-            SampleFormat::I8 => build_stream::<i8, C>(&device, stream_config, channels, healthy.clone(), callback)?,
-            SampleFormat::I16 => build_stream::<i16, C>(&device, stream_config, channels, healthy.clone(), callback)?,
-            SampleFormat::I32 => build_stream::<i32, C>(&device, stream_config, channels, healthy.clone(), callback)?,
-            SampleFormat::U8 => build_stream::<u8, C>(&device, stream_config, channels, healthy.clone(), callback)?,
-            SampleFormat::U16 => build_stream::<u16, C>(&device, stream_config, channels, healthy.clone(), callback)?,
-            SampleFormat::U32 => build_stream::<u32, C>(&device, stream_config, channels, healthy.clone(), callback)?,
-            SampleFormat::F32 => build_stream::<f32, C>(&device, stream_config, channels, healthy.clone(), callback)?,
-            SampleFormat::F64 => build_stream::<f64, C>(&device, stream_config, channels, healthy.clone(), callback)?,
+            SampleFormat::I8 => {
+                build_stream::<i8, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
+            SampleFormat::I16 => {
+                build_stream::<i16, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
+            SampleFormat::I32 => {
+                build_stream::<i32, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
+            SampleFormat::U8 => {
+                build_stream::<u8, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
+            SampleFormat::U16 => {
+                build_stream::<u16, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
+            SampleFormat::U32 => {
+                build_stream::<u32, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
+            SampleFormat::F32 => {
+                build_stream::<f32, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
+            SampleFormat::F64 => {
+                build_stream::<f64, C>(&device, stream_config, channels, healthy.clone(), callback)?
+            }
             other => return Err(AudioError::UnsupportedSampleFormat(other)),
         };
 

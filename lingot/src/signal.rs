@@ -44,8 +44,7 @@ fn is_peak(signal: &[f64], index: usize, peak_half_width: usize) -> bool {
 /// `lingot_signal_fft_bin_interpolate_quinn2_tau`.
 fn quinn2_tau(x: f64) -> f64 {
     0.25 * (3.0 * x * x + 6.0 * x + 1.0).ln()
-        - 0.102062072615966
-            * ((x + 1.0 - 0.816496580927726) / (x + 1.0 + 0.816496580927726)).ln()
+        - 0.102062072615966 * ((x + 1.0 - 0.816496580927726) / (x + 1.0 + 0.816496580927726)).ln()
 }
 
 /// Quinn's second estimator: sub-bin offset of a spectral peak, given the
@@ -490,11 +489,25 @@ mod tests {
         }
 
         let est = estimate_fundamental_frequency(
-            &snr, 0.0, &fft, 8, 1, n - 1, 1, delta_f, 10.0, 0.0, 50.0,
+            &snr,
+            0.0,
+            &fft,
+            8,
+            1,
+            n - 1,
+            1,
+            delta_f,
+            10.0,
+            0.0,
+            50.0,
         )
         .expect("should find a fundamental");
 
-        assert!((est.frequency - 300.0).abs() < 1.0, "freq = {}", est.frequency);
+        assert!(
+            (est.frequency - 300.0).abs() < 1.0,
+            "freq = {}",
+            est.frequency
+        );
         assert_eq!(est.divisor, 1);
     }
 
@@ -502,9 +515,8 @@ mod tests {
     fn estimate_returns_none_without_peaks() {
         let snr = vec![0.0; 64];
         let fft = vec![Complex64::new(0.0, 0.0); 64];
-        let est = estimate_fundamental_frequency(
-            &snr, 0.0, &fft, 8, 1, 63, 1, 100.0, 10.0, 0.0, 50.0,
-        );
+        let est =
+            estimate_fundamental_frequency(&snr, 0.0, &fft, 8, 1, 63, 1, 100.0, 10.0, 0.0, 50.0);
         assert_eq!(est, None);
     }
 

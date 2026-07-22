@@ -135,12 +135,12 @@ impl Scale {
             break (inf, sup);
         };
 
-        let (mut note_index, error_cents) = if (offset - pitch_inf).abs() < (offset - pitch_sup).abs()
-        {
-            (index, offset - pitch_inf)
-        } else {
-            (index + 1, offset - pitch_sup)
-        };
+        let (mut note_index, error_cents) =
+            if (offset - pitch_inf).abs() < (offset - pitch_sup).abs() {
+                (index, offset - pitch_inf)
+            } else {
+                (index + 1, offset - pitch_sup)
+            };
 
         if note_index == n {
             note_index = 0;
@@ -193,7 +193,10 @@ mod tests {
         let scale = Scale::default();
         // A4 is 9 semitones above C4 (index 0).
         let a4 = scale.frequency(9).get::<hertz>();
-        assert!((a4 - MID_A_FREQUENCY_HZ).abs() < 1e-6, "A4 = {a4}, expected 440");
+        assert!(
+            (a4 - MID_A_FREQUENCY_HZ).abs() < 1e-6,
+            "A4 = {a4}, expected 440"
+        );
     }
 
     #[test]

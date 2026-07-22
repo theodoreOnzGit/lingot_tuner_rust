@@ -69,7 +69,8 @@ impl FftPlan {
             *c = Complex::new(x, 0.0);
         }
 
-        self.fft.process_with_scratch(&mut self.buf, &mut self.scratch);
+        self.fft
+            .process_with_scratch(&mut self.buf, &mut self.scratch);
 
         let scale = 1.0 / (n as f64 * n as f64);
         for (out, c) in output.iter_mut().zip(&self.buf) {
@@ -99,7 +100,7 @@ pub fn spd_eval(
     let scale = 1.0 / (n as f64 * n as f64);
     let fs = sample_rate.get::<hertz>();
     let wi = 2.0 * PI * f_start.get::<hertz>() / fs; // rad/sample
-    let dw = 2.0 * PI * f_step.get::<hertz>() / fs;  // rad/sample
+    let dw = 2.0 * PI * f_step.get::<hertz>() / fs; // rad/sample
 
     for (i, out) in output.iter_mut().enumerate() {
         let w = wi + dw * i as f64;
@@ -188,7 +189,10 @@ mod tests {
             .unwrap();
 
         let expected_bin = (freq * n as f64 / SAMPLE_RATE).round() as usize;
-        assert_eq!(peak_bin, expected_bin, "peak should be at bin {expected_bin}");
+        assert_eq!(
+            peak_bin, expected_bin,
+            "peak should be at bin {expected_bin}"
+        );
     }
 
     #[test]
@@ -224,7 +228,7 @@ mod tests {
         let fs = sample_rate();
 
         let eps_hz = 0.5_f64;
-        let f      = Frequency::new::<hertz>(freq);
+        let f = Frequency::new::<hertz>(freq);
         let f_plus = Frequency::new::<hertz>(freq + eps_hz);
         let f_minus = Frequency::new::<hertz>(freq - eps_hz);
 
@@ -241,7 +245,13 @@ mod tests {
         let d2_err = (d2 - numerical_d2).abs() / d2.abs().max(numerical_d2.abs());
 
         // Central-difference truncation is O(eps²); 1% agreement is sufficient.
-        assert!(d1_err < 1e-2, "d1 relative error {d1_err:.2e}: got {d1}, numerical {numerical_d1}");
-        assert!(d2_err < 1e-2, "d2 relative error {d2_err:.2e}: got {d2}, numerical {numerical_d2}");
+        assert!(
+            d1_err < 1e-2,
+            "d1 relative error {d1_err:.2e}: got {d1}, numerical {numerical_d1}"
+        );
+        assert!(
+            d2_err < 1e-2,
+            "d2 relative error {d2_err:.2e}: got {d2}, numerical {numerical_d2}"
+        );
     }
 }

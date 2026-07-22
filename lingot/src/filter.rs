@@ -46,7 +46,10 @@ impl Filter {
     /// coefficients `b`. The order is `max(a.len(), b.len()) - 1`; both
     /// coefficient sets are zero-padded to that order and normalised by `a[0]`.
     pub fn new(a: &[f64], b: &[f64]) -> Self {
-        assert!(!a.is_empty() && !b.is_empty(), "coefficients must be non-empty");
+        assert!(
+            !a.is_empty() && !b.is_empty(),
+            "coefficients must be non-empty"
+        );
         assert!(a[0] != 0.0, "a[0] must be non-zero");
 
         let order_a = a.len() - 1;
@@ -145,7 +148,10 @@ impl Filter {
         }
 
         // bilinear transform
-        let sp: Vec<Complex64> = pole.iter().map(|p| Complex64::new(2.0 / t, 0.0) - p).collect();
+        let sp: Vec<Complex64> = pole
+            .iter()
+            .map(|p| Complex64::new(2.0 / t, 0.0) - p)
+            .collect();
         gain /= vector_product(&sp);
 
         for p in pole.iter_mut() {

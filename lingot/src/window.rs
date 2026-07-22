@@ -62,7 +62,11 @@ pub fn generate(n: usize, window_type: WindowType) -> Vec<f64> {
 
 /// Multiply a frame in place by a precomputed window. Lengths must match.
 pub fn apply(frame: &mut [f64], window: &[f64]) {
-    assert_eq!(frame.len(), window.len(), "frame and window length mismatch");
+    assert_eq!(
+        frame.len(),
+        window.len(),
+        "frame and window length mismatch"
+    );
     for (x, w) in frame.iter_mut().zip(window) {
         *x *= w;
     }

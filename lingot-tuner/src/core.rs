@@ -50,9 +50,7 @@ use lingot::audio::{AudioError, AudioInput, AudioInputConfig};
 use lingot::config::Config;
 use lingot::fft::{spd_diffs_eval_w, FftPlan};
 use lingot::filter::Filter;
-use lingot::signal::{
-    compute_noise_level, estimate_fundamental_frequency, FrequencyLocker,
-};
+use lingot::signal::{compute_noise_level, estimate_fundamental_frequency, FrequencyLocker};
 use lingot::window::{self, WindowType};
 
 /// A single tuner reading delivered to the UI.
@@ -399,12 +397,7 @@ impl Analyzer {
             }
 
             // Newton-Raphson pass 1: the FFT window.
-            w = newton_raphson(
-                &self.windowed_fft_buffer,
-                w,
-                self.config.max_nr_iter,
-                false,
-            );
+            w = newton_raphson(&self.windowed_fft_buffer, w, self.config.max_nr_iter, false);
 
             // Pass 2: the full temporal window, for higher resolution.
             if w > 0.0 {

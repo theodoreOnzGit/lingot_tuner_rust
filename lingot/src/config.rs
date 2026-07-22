@@ -37,7 +37,6 @@ use crate::window::WindowType;
 #[derive(Clone, Debug)]
 pub struct Config {
     // ---- user-facing parameters ----------------------------------------
-
     /// Selected input device; `None` uses the system default (cpal).
     pub audio_device: Option<String>,
     /// Hardware sample rate.
@@ -65,7 +64,6 @@ pub struct Config {
     pub max_nr_iter: usize,
 
     // ---- derived / internal parameters ---------------------------------
-
     /// Oversampling (decimation) factor.
     pub oversampling: u32,
     /// Lowest valid frequency.
@@ -107,8 +105,7 @@ impl Config {
         self.oversampling = (0.5 * sample_rate / internal_max).floor().max(1.0) as u32;
 
         let suggested_fft_size = if internal_max > 5000.0 { 1024 } else { 512 };
-        let mut suggested_window =
-            self.fft_size as f64 * self.oversampling as f64 / sample_rate;
+        let mut suggested_window = self.fft_size as f64 * self.oversampling as f64 / sample_rate;
         if suggested_window < 0.3 {
             suggested_window = 0.3;
         }
@@ -152,8 +149,8 @@ impl Default for Config {
             audio_device: None,
             sample_rate: Frequency::new::<hertz>(44100.0),
             root_frequency_error: Frequency::new::<hertz>(0.0),
-            min_frequency: Frequency::new::<hertz>(82.407),    // E2
-            max_frequency: Frequency::new::<hertz>(329.6276),  // E4
+            min_frequency: Frequency::new::<hertz>(82.407), // E2
+            max_frequency: Frequency::new::<hertz>(329.6276), // E4
             optimize_internal_parameters: false,
             fft_size: 512,
             temporal_window: Time::new::<second>(0.3),

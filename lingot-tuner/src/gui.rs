@@ -25,7 +25,6 @@
 //! egui frontend (Layer 5): an analog tuning gauge (in the style of lingot's
 //! cairo gauge) plus a live spectrum view.
 
-
 use crossbeam_channel::Receiver;
 use eframe::egui::{self, Align2, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Vec2};
 use lingot::config::Config;
@@ -147,13 +146,13 @@ impl eframe::App for TunerApp {
                         .size(22.0)
                         .color(colour),
                 );
-                ui.label(egui::RichText::new(format!("{:.2} Hz", self.frequency)).size(16.0).weak());
-            } else {
                 ui.label(
-                    egui::RichText::new("------ cents")
-                        .size(22.0)
-                        .color(colour),
+                    egui::RichText::new(format!("{:.2} Hz", self.frequency))
+                        .size(16.0)
+                        .weak(),
                 );
+            } else {
+                ui.label(egui::RichText::new("------ cents").size(22.0).color(colour));
                 ui.label(egui::RichText::new("listening…").size(16.0).weak());
             }
         });
@@ -190,14 +189,32 @@ impl TunerApp {
         // in-tune band: red across the full sweep, green in the centre
         let ok_r = h * 0.48;
         let ok_stroke = h * 0.07;
-        arc(&painter, center, ok_r, -overture, overture,
-            Stroke::new(ok_stroke, Color32::from_rgb(221, 170, 170)));
-        arc(&painter, center, ok_r, -0.12 * overture, 0.12 * overture,
-            Stroke::new(ok_stroke, Color32::from_rgb(153, 221, 153)));
+        arc(
+            &painter,
+            center,
+            ok_r,
+            -overture,
+            overture,
+            Stroke::new(ok_stroke, Color32::from_rgb(221, 170, 170)),
+        );
+        arc(
+            &painter,
+            center,
+            ok_r,
+            -0.12 * overture,
+            0.12 * overture,
+            Stroke::new(ok_stroke, Color32::from_rgb(153, 221, 153)),
+        );
 
         // cents arc
-        arc(&painter, center, cents_bar_r, -1.05 * overture, 1.05 * overture,
-            Stroke::new(h * 0.022, Color32::from_rgb(51, 51, 85)));
+        arc(
+            &painter,
+            center,
+            cents_bar_r,
+            -1.05 * overture,
+            1.05 * overture,
+            Stroke::new(h * 0.022, Color32::from_rgb(51, 51, 85)),
+        );
 
         // tic spacing (lingot's adaptive division logic)
         let (cents_per_minor, cents_per_major) = divisions(self.gauge_range);
@@ -210,8 +227,10 @@ impl TunerApp {
         let step_minor = 2.0 * overture * cpm / gauge_range;
         for i in -n_minor..=n_minor {
             let a = i as f32 * step_minor;
-            painter.line_segment([polar(minor_r, a), polar(cents_bar_r, a)],
-                Stroke::new(h * 0.008, ink));
+            painter.line_segment(
+                [polar(minor_r, a), polar(cents_bar_r, a)],
+                Stroke::new(h * 0.008, ink),
+            );
         }
 
         // major tics + numeric labels
@@ -221,25 +240,43 @@ impl TunerApp {
         let font = FontId::proportional(h * 0.085);
         for i in -n_major..=n_major {
             let a = i as f32 * step_major;
-            painter.line_segment([polar(major_r, a), polar(cents_bar_r, a)],
-                Stroke::new(h * 0.022, ink));
+            painter.line_segment(
+                [polar(major_r, a), polar(cents_bar_r, a)],
+                Stroke::new(h * 0.022, ink),
+            );
             let cents = (i as f32 * cpmaj) as i32;
-            let label = if cents > 0 { format!("+{cents}") } else { format!("{cents}") };
+            let label = if cents > 0 {
+                format!("+{cents}")
+            } else {
+                format!("{cents}")
+            };
             // Numbers sit just inside the tics; the "cent" label sits lower
             // (just above the green band) so the two never overlap at the top.
-            painter.text(polar(major_r * 0.93, a), Align2::CENTER_CENTER, label,
-                font.clone(), ink);
+            painter.text(
+                polar(major_r * 0.93, a),
+                Align2::CENTER_CENTER,
+                label,
+                font.clone(),
+                ink,
+            );
         }
-        painter.text(Pos2::new(center.x, center.y - major_r * 0.805), Align2::CENTER_CENTER,
-            "cent", font, ink);
+        painter.text(
+            Pos2::new(center.x, center.y - major_r * 0.805),
+            Align2::CENTER_CENTER,
+            "cent",
+            font,
+            ink,
+        );
 
         // needle — uses the smoothed gauge position (which glides toward the
         // detected cents, or toward gauge_rest_value when no pitch is present).
         let clamped = (self.needle.position() as f32).clamp(-gauge_range / 2.0, gauge_range / 2.0);
         let a = 2.0 * (clamped / gauge_range) * overture;
         let red = Color32::from_rgb(170, 51, 51);
-        painter.line_segment([polar(-h * 0.08, a), polar(h * 0.85, a)],
-            Stroke::new(h * 0.013, red));
+        painter.line_segment(
+            [polar(-h * 0.08, a), polar(h * 0.85, a)],
+            Stroke::new(h * 0.013, red),
+        );
         painter.circle_filled(center, h * 0.045, red);
     }
 

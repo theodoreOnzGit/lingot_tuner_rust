@@ -182,16 +182,11 @@ impl TunerTui {
         let text = vec![
             Line::from(Span::styled(
                 self.note.clone(),
-                Style::default()
-                    .fg(colour)
-                    .add_modifier(Modifier::BOLD),
+                Style::default().fg(colour).add_modifier(Modifier::BOLD),
             )),
             Line::from(Span::styled(hz, Style::default().fg(Color::DarkGray))),
         ];
-        frame.render_widget(
-            Paragraph::new(text).alignment(Alignment::Center),
-            area,
-        );
+        frame.render_widget(Paragraph::new(text).alignment(Alignment::Center), area);
     }
 
     /// The needle: a caret under the gauge bar, positioned by the smoothed
@@ -244,17 +239,13 @@ impl TunerTui {
                 Style::default().fg(Color::DarkGray),
             )),
         ];
-        frame.render_widget(
-            Paragraph::new(lines).alignment(Alignment::Center),
-            area,
-        );
+        frame.render_widget(Paragraph::new(lines).alignment(Alignment::Center), area);
     }
 }
 
 fn should_quit(key: KeyEvent) -> bool {
     matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
-        || (key.modifiers.contains(KeyModifiers::CONTROL)
-            && matches!(key.code, KeyCode::Char('c')))
+        || (key.modifiers.contains(KeyModifiers::CONTROL) && matches!(key.code, KeyCode::Char('c')))
 }
 
 /// Map a cents offset to a column, so the needle, the bar and the labels all
@@ -316,7 +307,9 @@ fn draw_scale_labels(frame: &mut Frame, area: Rect, gauge_range: f64) {
         let centre = cents_to_col(cents, gauge_range, area.width);
         // Keep the label inside the row; it is centred on its tick where there
         // is room, and nudged inward at the edges.
-        let start = centre.saturating_sub(label.len() / 2).min(w.saturating_sub(label.len()));
+        let start = centre
+            .saturating_sub(label.len() / 2)
+            .min(w.saturating_sub(label.len()));
         for (i, ch) in label.chars().enumerate() {
             if start + i < w {
                 row[start + i] = ch;

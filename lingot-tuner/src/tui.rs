@@ -65,12 +65,8 @@ pub fn run() -> io::Result<()> {
         Ok(running) => running,
         Err(e) => {
             eprintln!("failed to start audio: {e}");
-            if cfg!(target_os = "android") {
-                eprintln!(
-                    "\nhint: on Android/Termux, recording requires the microphone permission.\n\
-                     Grant it to Termux (Settings > Apps > Termux > Permissions > Microphone),\n\
-                     or via adb: pm grant com.termux android.permission.RECORD_AUDIO"
-                );
+            if let Some(hint) = crate::audio_start_hint() {
+                eprintln!("\n{hint}");
             }
             std::process::exit(1);
         }

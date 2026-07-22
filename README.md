@@ -50,9 +50,10 @@ A state machine filters out transient glitches. It requires several consistent r
 
 ### 3. Frontends
 
-In this rewrite the computation thread sends each result (frequency + noise-subtracted SPD) to the frontend over a channel; the frontend renders at its own rate. Two frontends share the same core:
+In this rewrite the computation thread sends each result (frequency + noise-subtracted SPD) to the frontend over a channel; the frontend renders at its own rate. Three frontends share the same core:
 
 - **`lingot-tuner-cli`** — prints the detected note, cents, and frequency to the terminal.
+- **`lingot-tuner-tui`** — a [ratatui](https://ratatui.rs) terminal gauge: note, cents, frequency, and a needle on a cents scale. This is the frontend for Android/Termux, where the GUI cannot run (see [Android / Termux](#android--termux)). It uses the same needle smoothing as the GUI, so the motion is identical.
 - **`lingot-tuner`** — an [egui](https://github.com/emilk/egui) GUI rendering:
   - the **note name**, the **cents off-tune**, and the **frequency**;
   - an **analog tuning gauge** in the style of lingot's cairo gauge — a cents arc with minor/major tics and labels, a green/red in-tune band, and a needle hinged near the bottom. The needle is smoothed by a 2nd-order "damped spring" IIR filter (ported from lingot) driven at a fixed 60 Hz, and rests near the left (`gauge_rest_value`) when no pitch is present;
@@ -73,10 +74,13 @@ cargo build --release
 
 ## Running
 
-The `lingot-tuner` package builds two binaries:
+The `lingot-tuner` package builds three binaries:
 
 - **`lingot-tuner`** — the graphical (egui) tuner, behind the optional `gui` feature.
-- **`lingot-tuner-cli`** — a command-line tuner (always builds, no GUI dependencies).
+- **`lingot-tuner-tui`** — a terminal gauge, behind the optional `tui` feature.
+- **`lingot-tuner-cli`** — a command-line tuner (always builds, no frontend dependencies).
+
+`gui` and `tui` are both enabled by default, so `cargo install lingot-tuner` gives you all three.
 
 ### GUI tuner
 
@@ -86,6 +90,53 @@ the style of lingot's), and a live spectrum. It is behind the `gui` feature:
 ```
 cargo run --release --bin lingot-tuner --features gui
 ```
+
+### Terminal tuner
+
+```
+cargo run --release --bin lingot-tuner-tui
+```
+
+```
+┌────────────────────lingot-tuner────────────────────┐
+│                        A4                          │
+│                     440.00 Hz                      │
+│-50          -25             0            +25    +50│
+│├─────────────┼──────────────╫─────────────┼───────┤│
+│                             ▲                      │
+│                    +2.3 cents                      │
+│                     in tune ✓                      │
+└────────────────────────────────────────────────────┘
+```
+
+Quit with `q`, `Esc`, or `Ctrl-C`.
+
+### Android / Termux
+
+Everything except the egui GUI builds and runs natively on Termux:
+
+```
+pkg install rust
+cargo install lingot-tuner
+lingot-tuner-tui
+```
+
+**The graphical tuner cannot work under Termux, and no configuration changes
+that.** winit gates its X11 backend on `free_unix`, which explicitly excludes
+`target_os = "android"`, so the backend is compiled out — running the Termux:X11
+app will not help. The terminal tuner is the frontend to use. (`lingot-tuner`
+still builds on Android; it just tells you to use another binary.)
+
+**Grant the microphone permission**, or audio will fail to start:
+
+1. Check that the **Termux:API** add-on app is installed. It declares
+   `RECORD_AUDIO` and shares Termux's UID, which is what makes the permission
+   grantable at all.
+2. Grant it: *Settings → Apps → Termux → Permissions → Microphone*
+   (or over adb: `pm grant com.termux android.permission.RECORD_AUDIO`).
+
+Without this, capture fails with an AAudio error that says nothing about
+permissions — so the binaries print this advice when startup fails on Android.
 
 ### CLI tuner
 

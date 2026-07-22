@@ -14,7 +14,7 @@ categories = ["multimedia::audio", "command-line-utilities"]
 [dependencies]
 # `version` is required so the crate is publishable; `path` still wins for
 # local workspace builds.
-lingot = { path = "../lingot", version = "0.2.1" }
+lingot = { path = "../lingot", version = "0.2.2" }
 crossbeam-channel = "0.5"
 uom = "0.38.0"
 # Terminal frontend. Pure Rust + termios, so unlike eframe this *does* build for

@@ -29,6 +29,30 @@
 //! binaries: `lingot-tuner` (GUI) and `lingot-tuner-cli` (CLI). It is allowed to
 //! contain application-level threading and `egui` code.
 
+/// Advice to print when [`core::Core::start`] fails, or `None` where the
+/// platform offers none.
+///
+/// Android surfaces a permission refusal as a bare AAudio error that says
+/// nothing about permissions, so the cause has to be spelled out. Confirmed in
+/// the field: granting Termux the microphone permission is what fixes it.
+///
+/// Shared by both frontends so the two copies cannot drift apart.
+pub fn audio_start_hint() -> Option<&'static str> {
+    if cfg!(target_os = "android") {
+        Some(
+            "hint: on Android/Termux this is almost always the microphone permission.\n\
+             \n\
+             \x20 1. Check that the Termux:API add-on app is installed. It declares\n\
+             \x20    RECORD_AUDIO and shares Termux's UID, which is what makes the\n\
+             \x20    permission grantable at all.\n\
+             \x20 2. Grant it:  Settings > Apps > Termux > Permissions > Microphone\n\
+             \x20    (or, over adb:  pm grant com.termux android.permission.RECORD_AUDIO)",
+        )
+    } else {
+        None
+    }
+}
+
 pub mod core;
 pub mod gauge;
 #[cfg(all(feature = "gui", not(target_os = "android")))]

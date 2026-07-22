@@ -103,7 +103,7 @@ Rules:
 | 3 — Audio capture (cpal) | ✅ done | `lingot/src/audio.rs` |
 | 4 — Core loop | ✅ done (verified on real guitar) | `lingot-tuner/src/core.rs` |
 | 5 — GUI (egui) | ✅ done (analog gauge, verified on guitar) | `lingot-tuner/src/gui.rs` |
-| 5b — TUI (ratatui) | ✅ done (verified rendering + live pitch on desktop) | `lingot-tuner/src/tui.rs` |
+| 5b — TUI (ratatui) | ✅ done (verified on desktop **and on a Pixel 10a under Termux**) | `lingot-tuner/src/tui.rs` |
 
 **Three binaries** in the `lingot-tuner` package: `lingot-tuner` (GUI, behind the
 optional `gui` feature → `eframe`), `lingot-tuner-tui` (terminal gauge, behind the

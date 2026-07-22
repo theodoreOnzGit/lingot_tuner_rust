@@ -38,12 +38,26 @@ global to all repos, not per-repo. So this path is gitignored.
 A real file (mode 100644) with real JSON content, at a path bd never touches. This is
 what makes bead content readable on GitHub and diffable in normal `main` commits.
 
-**It does not update itself.** Refresh it before committing bead changes:
+It is a derived snapshot, not the source of truth. If it goes stale, regenerate it —
+never hand-edit it.
+
+### Keeping it fresh automatically
+
+`.githooks/pre-commit` refreshes and stages this file on every commit. Enable it once
+per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The hook is deliberately **non-fatal**: refreshing runs `bd sync`, which touches the
+network (bd auto-pushes its own `beads/store`), and neither an offline machine nor a
+missing `bd` should ever block a commit. If it cannot refresh, it warns and lets the
+commit through — so treat a stale export as possible, not impossible.
+
+Without the hook, refresh manually:
 
 ```sh
 .beads/refresh-export.sh
 git add .beads/issues.export.jsonl
 ```
-
-It is a derived snapshot, not the source of truth. If it goes stale, regenerate it —
-never hand-edit it.

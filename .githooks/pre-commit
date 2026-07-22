@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Keep the committed bead export in sync automatically.
+#
+# Without this, .beads/issues.export.jsonl silently goes stale: bd owns
+# .beads/issues.jsonl (a symlink into ~/.local/share/beads-rs/, hence gitignored),
+# so nothing about a `bd create`/`bd close` ever shows up in `git status`. The
+# export is the only readable copy on main, and a manual "remember to run the
+# script" step is exactly the kind of thing that gets forgotten.
+#
+# Enable it with:
+#     git config core.hooksPath .githooks
+#
+# This hook is deliberately NON-FATAL. Refreshing calls `bd sync`, which touches
+# the network (bd auto-pushes its own refs/heads/beads/store). Being unable to
+# reach the network, or not having bd installed at all, must never block a
+# commit — you would be unable to commit on a plane over an issue-tracker export.
+set -uo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+script="$repo_root/.beads/refresh-export.sh"
+export_file="$repo_root/.beads/issues.export.jsonl"
+
+if ! command -v bd >/dev/null 2>&1; then
+  exit 0  # bd not installed; nothing to refresh
+fi
+
+if [ ! -x "$script" ]; then
+  exit 0
+fi
+
+if ! "$script" >/dev/null 2>&1; then
+  echo "pre-commit: could not refresh the bead export (bd sync failed)." >&2
+  echo "pre-commit: committing anyway; .beads/issues.export.jsonl may be stale." >&2
+  exit 0
+fi
+
+# Only stage it if it actually changed, so the hook never creates empty noise.
+if ! git diff --quiet -- "$export_file" 2>/dev/null; then
+  git add "$export_file"
+  echo "pre-commit: refreshed and staged .beads/issues.export.jsonl"
+fi
+
+exit 0

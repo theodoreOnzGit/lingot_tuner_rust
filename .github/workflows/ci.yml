@@ -99,11 +99,42 @@ jobs:
       - name: cargo test
         run: cargo test --workspace
 
-# Not present, on purpose:
-#   * clippy — `cargo clippy --workspace --all-targets` currently reports 4
-#     pre-existing warnings in the `lingot` library. Adding a gating job would
-#     mean either red CI from day one or editing source that is out of scope for
-#     wiring up CI.
-#   * rustfmt — `cargo fmt --check` currently reports diffs across most files in
-#     the workspace; the tree has never been rustfmt'd.
-# Both become worth adding once the tree is cleaned up in a separate change.
+  # Formatting. Needs no system packages — rustfmt parses, it does not build.
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: cargo fmt --check
+        run: cargo fmt --all --check
+
+  # Lints, gating on warnings. Clippy compiles the crates, so this needs the
+  # same system packages as `test`.
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        # Same reasoning as the `test` job: alsa-sys is the only crate linking a
+        # system library.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libasound2-dev pkg-config
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: clippy
+
+      - name: cargo clippy -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings

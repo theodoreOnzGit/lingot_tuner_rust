@@ -123,6 +123,17 @@ cannot run under Termux-X11 at all, and a terminal frontend is the only one that
 works natively on Termux. `ratatui` is pure Rust + termios and builds fine for
 `aarch64-linux-android`.
 
+**Frontend direction — decided, do not relitigate.** The TUI's linear cents bar
+is the intended terminal presentation and is verified on-device. A higher-fidelity
+arc gauge drawn with ratatui's `Canvas` (braille 2×4 sub-cells) was prototyped and
+**deliberately abandoned** — it worked, but terminal cells are the wrong medium to
+keep pushing. If a richer UI is ever wanted, the chosen route is a **Tauri**
+frontend, not finer terminal pixels and not Termux:GUI. Options ruled out, with
+reasons, so they are not re-explored: Termux:X11 (winit compiles X11 out on
+Android), Termux:GUI (requires an add-on app, shared-signature install risk, no
+Canvas), proot + X11 (abandons the native-build rule, ~1GB, second audio stack),
+and a standalone APK (needs the full Android SDK/NDK toolchain).
+
 **Needle smoothing is shared** (`gauge.rs`, no frontend deps): `Needle` owns
 lingot's 2nd-order damped-spring IIR and steps it at a fixed 60 Hz via a time
 accumulator, so the GUI (60+ Hz) and the TUI (≈30 Hz) show identical motion.
